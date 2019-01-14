@@ -90,7 +90,7 @@ class LogisticFeedForward(nn.Module):
 
 class NNPeForces():
     def __init__(self,images,labels, n_input_nodes, n_nodes_h_layers, n_output_classes, n_h_layers ):
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(reduction='sum')
         self.images = images # fixed, full batch
         self.labels = labels # fixed, full batch
         self.n_input_nodes = n_input_nodes
