@@ -1,3 +1,11 @@
+#!/usr/bin/env python
+"""This module calculates the potential energy field over the parameters of a classifier, which is
+a feed forward neural network of logistic neurons terminated with a softmax. It also calculates the
+negative gradient (called the force) for that field. The potential energy is just the cross entropy
+loss, which is the negative logarithm of the probability the classifier correctly assigns the labels
+of every image in the training set. The module also builds or imports a stratified subset of the
+MNIST training set, so that the energy field is reproducable."""
+
 import torch
 import torch.nn as nn
 import torchvision.datasets as datasets
@@ -28,7 +36,7 @@ def build_repeatable_NNPeForces(indfl = "dataindices.txt", image_sidel_use = 20,
 
     print "About to build data subset "+str(time.ctime())
     train_images, train_labels, test_images, test_labels = \
-        build_data_general(mnist_trainset, mnist_testset, image_sidel_use, nodes_per_h_layer, \
+        build_data_general(mnist_trainset, mnist_testset, image_sidel_use, \
         target_n_per_class = datapoints_per_class, indices_file = indfl)
 
     print "Finished building data subset "+str(time.ctime())
@@ -39,6 +47,20 @@ def build_repeatable_NNPeForces(indfl = "dataindices.txt", image_sidel_use = 20,
     return nn_pef # nn_pef IS THE VARIABLE TO CALL FOR FORCES AND POTENTIAL ENERGIES in other modules
 
 class LogisticFeedForward(nn.Module):
+    """This class defines a (feed forward) network of logistic neurons, terminated with a softmax
+    and with the parameters specified in initial_param.
+    
+    Args:
+        n_input_nodes (int) :: the number of input nodes
+        n_nodes_h_layers (int) :: the number of nodes in each hidden layer
+        n_output_classes (int) :: the number of nodes in the final (output) layer
+        n_h_layers (int) :: the number of hidden layers
+        initial_param (list) :: List of lists containing the weights and bias values for neurons in 
+            each layer. Each element of initial_param refers to a seperate layer of the network.
+            The 0th element refers to the first layer and the last element to the output layer.
+            Each element of initial_param has the form [weights, biases] where
+            weights and biases are pytorch tensors.
+    """
 
     def __init__(self, n_input_nodes, n_nodes_h_layers, n_output_classes, n_h_layers, initial_param):
         super(LogisticFeedForward, self).__init__()
@@ -63,18 +85,21 @@ class LogisticFeedForward(nn.Module):
         self.set_h_layer('hlinearout',self.n_nodes_h_layers,self.n_output_classes,initial_param[-1])
 
     def forward(self,x):
+        """Forward pass for the network. """
 
         for layer in self.layers:
             x = torch.sigmoid(layer(x))
         return x
 
     def set_h_layer(self,layername, insize, outsize, params):
+        """Creates a layer for the network and appends it to array self.layers."""
         self.layername = nn.Linear(insize, outsize)
         self.layername.weight.data = params[0]
         self.layername.bias.data = params[1]
         self.layers.append(self.layername)
 
     def return_params_as_array(self):
+        """Returns network parameters as a 1-d numpy array."""
         out = None
         for layer in self.layers:
             w = layer.weight.data
@@ -89,6 +114,15 @@ class LogisticFeedForward(nn.Module):
         return out.numpy()
 
 class NNPeForces():
+    """This class enables the evaluation of the potential energy (cross entropy loss) and 
+    forces (negative gradient of the cross entropy loss) for a neural network.
+
+    Args:
+        n_input_nodes (int) :: the number of input nodes
+        n_nodes_h_layers (int) :: the number of nodes in each hidden layer
+        n_output_classes (int) :: the number of nodes in the final (output) layer
+        n_h_layers (int) :: the number of hidden layers
+    """
     def __init__(self,images,labels, n_input_nodes, n_nodes_h_layers, n_output_classes, n_h_layers ):
         self.criterion = nn.CrossEntropyLoss(reduction='sum')
         self.images = images # fixed, full batch
@@ -103,16 +137,45 @@ class NNPeForces():
         self.fstore = None
 
     def pe(self,w):
+        """Call this function obtain the potential energy.
+
+        Args:
+            w: 1-d numpy array of floats specifying the parameters of the neural network.
+
+        Return:
+            pe (float)
+        """
 
         pe, forces = self.calc(w)
         return pe
 
     def forces(self,w):
+        """Call this function to obtain the forces (negative gradient).
+
+        Args:
+            w: 1-d numpy array of floats specifying the parameters of the neural network.
+
+        Return:
+            forces (1-d numpy array of floats with same length as w)
+        """
 
         pe, forces = self.calc(w, do_forces = True)
         return forces
 
     def calc(self,w, do_forces = False):
+        """This is the (hidden) routine that actually calculates the potential energy and forces.
+        The code is organised this way because a lot of the code is shared. If the network parameters 
+        are the same as those presented last time, then the result is recalled from memory.
+        
+        Args:
+            w:  1-d numpy array of floats specifying the parameters of the neural network.
+            do_forces (logical, default True) : if True then the backwards pass is performed for the
+                network to obtain the gradients of the parameters. (Or if stored last time, 
+                the forces are instead recalled from memory.)
+
+        Return:
+            pe (float), forces (1-d numpy array of floats with same length as w).
+        """
 
         if (self.wstore is not None):
             # quick lookup in case the method was called previously without changing w
@@ -147,6 +210,20 @@ class NNPeForces():
         return self.pestore, self.fstore
 
     def w_to_nn_params(self,w):
+        """Converts a 1-d numpy array (w) into a list of lists, containing PyTorch tensors specifying
+        the parameters of the neural network.
+        
+        Args:
+            w:  1-d numpy array of floats specifying the parameters of the neural network.
+         
+        Return:
+        initial_param (list) :: List of lists containing the weights and bias values for neurons in 
+            each layer. Each element of initial_param refers to a seperate layer of the network.
+            The 0th element refers to the first layer and the last element to the output layer.
+            Each element of initial_param has the form [weights, biases] where
+            weights and biases are pytorch tensors.
+        """
+
         init_params = []
         wstrt, wend = 0, 0
 
@@ -181,6 +258,15 @@ class NNPeForces():
         return init_params
 
     def grads_to_forces(self,net):
+        """Converts the grad of the network parameters, calculated by PyTorch, into a 1-d numpy array
+        specifying the forces (negative gradient) for the parameters.
+        
+        Args:
+            net:    Instance of LogisticFeedForward class, for which backward has been called.
+            
+        Return:
+            f:      1-d numpy array of floats specifying the forces for the parameters).
+            """
 
         f = None
         for layer in net.layers:
@@ -197,11 +283,30 @@ class NNPeForces():
 
         return f
 
-def build_data_general(fulltrain_dataset, fulltest_dataset, image_sidel_use, nodes_per_h_layer, \
+def build_data_general(fulltrain_dataset, fulltest_dataset, image_sidel_use, \
     target_n_per_class = 100, indices_file = "dataindices.txt", \
     append_testset = True):
     """Builds and records a repeatable dataset using stratified sampling. Dataset indicies 
-    written to indicies_file."""
+    written to indicies_file.
+    
+    Args: 
+        fulltrain_dataset: Full training data set from which samples will be chosen or read.
+        fulltest_dataset: The full test set.
+        image_sidel_use (int) :: Images will be transformed to have this many pixels along the side.
+        target_n_per_class (int) :: Number of stratified samples to draw per class. If there are fewer
+            than target_n_per_class items in a class in fulltrain_dataset then, all the data in that 
+            class will be returned.
+        indices_file (str) :: name of file for storing or recovering the indicies of data points in 
+            fulltrain_dataset which comprise the stratified sample. If this file exists, the indicies 
+            of the data points are read from the file. If the file does not exist then it is created 
+            and the indicies of a random stratified data sample are written there.
+        append_test (logical) :: If True, then the remaining data excluded from the stratified sample,
+            is appended to the test set data. Default=True.
+
+
+    Return:
+        train_images, train_labels, test_images, test_labels
+    """
 
     from collections import Counter
 
@@ -259,9 +364,22 @@ def build_data_general(fulltrain_dataset, fulltest_dataset, image_sidel_use, nod
     return train_images, train_labels, test_images, test_labels
 
 def sampleFromClass(dataset, target_num_per_class):
-    """Get stratified samples from dataset."""
-    """This function adapted from ShitalShah's stackoverflow post here:
-    https://stackoverflow.com/questions/50544730/split-dataset-train-and-test-in-pytorch-using-custom-dataset."""
+    """Get stratified samples from dataset.
+    This function adapted from ShitalShah's stackoverflow post here:
+    https://stackoverflow.com/questions/50544730/split-dataset-train-and-test-in-pytorch-using-custom-dataset.
+    
+    Args:
+        dataset: PyTorch data set
+        target_num_per_class (int) :: Number of stratified samples to draw per class. If there are 
+            fewer than target_n_per_class items in a class in fulltrain_dataset then, all the data 
+            in that class will be returned.
+
+    Return:
+        indices_train, indices_remain:  Lists of integers specifying the indices of data points from 
+            dataset. 
+            indices_train: indices of data points that make up stratified sample (new training set).
+            indices_remain: indices of points not in indices_train.
+    """
     class_counts = {}
     indices_train = []
     indices_remain = []
@@ -291,7 +409,18 @@ def sampleFromClass(dataset, target_num_per_class):
 def calc_fan_in(n_inputs_nodes,n_h_layers,nodes_per_h_layer,n_classes):
     """For each weight or bias term (returned in a single 1d numpy array), this function identifies
     the neuron to which that weight (bias term) is connected and returns the total fan in to that 
-    node as a float. The fan in is the number of inwards pointing weights + 1."""
+    node as a float. The fan in is the number of inwards pointing weights + 1.
+    
+    Args:
+        n_input_nodes (int) :: the number of input nodes
+        n_h_layers (int) :: the number of hidden layers
+        nodes_per_h_layers (int) :: the number of nodes in each hidden layer
+        n_classes (int) :: the number of nodes in the final (output) layer
+
+    Return:
+        fan:    1-d numpy array, with one element for each parameter in the network, each specifying
+            the fan in to the node to which the weight connects inwards.
+    """
 
     fan = np.asarray([])
     for i in xrange(n_h_layers+1):
