@@ -51,15 +51,23 @@ class LogisticFeedForward(nn.Module):
     and with the parameters specified in initial_param.
     
     Args:
-        n_input_nodes (int) :: the number of input nodes
-        n_nodes_h_layers (int) :: the number of nodes in each hidden layer
-        n_output_classes (int) :: the number of nodes in the final (output) layer
-        n_h_layers (int) :: the number of hidden layers
-        initial_param (list) :: List of lists containing the weights and bias values for neurons in 
+        n_input_nodes (int) : the number of input nodes
+        n_nodes_h_layers (int) : the number of nodes in each hidden layer
+        n_output_classes (int) : the number of nodes in the final (output) layer
+        n_h_layers (int) : the number of hidden layers
+        initial_param (list) : List of lists containing the weights and bias values for neurons in 
             each layer. Each element of initial_param refers to a seperate layer of the network.
             The 0th element refers to the first layer and the last element to the output layer.
             Each element of initial_param has the form [weights, biases] where
             weights and biases are pytorch tensors.
+
+    Attributes:
+        n_input_nodes (int) : the number of input nodes
+        n_nodes_h_layers (int) : the number of nodes in each hidden layer
+        n_output_classes (int) : the number of nodes in the final (output) layer
+        n_h_layers (int) : the number of hidden layers
+        layers : list of nn.Linear layers which comprise the nn.
+
     """
 
     def __init__(self, n_input_nodes, n_nodes_h_layers, n_output_classes, n_h_layers, initial_param):
@@ -71,7 +79,6 @@ class LogisticFeedForward(nn.Module):
         self.layers = []
 
         for ind in xrange(self.n_h_layers):
-            lname = "hlinear"+str(ind)
             if (ind == 0):
                 insize = self.n_input_nodes
                 outsize = self.n_nodes_h_layers
@@ -80,9 +87,9 @@ class LogisticFeedForward(nn.Module):
                 outsize = self.n_nodes_h_layers
             params = initial_param[ind]
 
-            self.set_h_layer(lname, insize, outsize, params)
+            self.set_h_layer(insize, outsize, params)
 
-        self.set_h_layer('hlinearout',self.n_nodes_h_layers,self.n_output_classes,initial_param[-1])
+        self.set_h_layer(self.n_nodes_h_layers,self.n_output_classes,initial_param[-1])
 
     def forward(self,x):
         """Forward pass for the network. """
@@ -91,12 +98,12 @@ class LogisticFeedForward(nn.Module):
             x = torch.sigmoid(layer(x))
         return x
 
-    def set_h_layer(self,layername, insize, outsize, params):
+    def set_h_layer(self, insize, outsize, params):
         """Creates a layer for the network and appends it to array self.layers."""
-        self.layername = nn.Linear(insize, outsize)
-        self.layername.weight.data = params[0]
-        self.layername.bias.data = params[1]
-        self.layers.append(self.layername)
+        layer = nn.Linear(insize, outsize)
+        layer.weight.data = params[0]
+        layer.bias.data = params[1]
+        self.layers.append(layer)
 
     def return_params_as_array(self):
         """Returns network parameters as a 1-d numpy array."""
@@ -118,10 +125,25 @@ class NNPeForces():
     forces (negative gradient of the cross entropy loss) for a neural network.
 
     Args:
-        n_input_nodes (int) :: the number of input nodes
-        n_nodes_h_layers (int) :: the number of nodes in each hidden layer
-        n_output_classes (int) :: the number of nodes in the final (output) layer
-        n_h_layers (int) :: the number of hidden layers
+        images: training image data set
+        labels: training image labels
+        n_input_nodes (int) : the number of input nodes
+        n_nodes_h_layers (int) : the number of nodes in each hidden layer
+        n_output_classes (int) : the number of nodes in the final (output) layer
+        n_h_layers (int) : the number of hidden layers
+
+    Attributes:
+        images: training image data set
+        labels: training image labels
+        n_input_nodes (int) : the number of input nodes
+        n_nodes_h_layers (int) : the number of nodes in each hidden layer
+        n_output_classes (int) : the number of nodes in the final (output) layer
+        n_h_layers (int) : the number of hidden layers
+        criterion: torch.nn loss function (hardcoded to cross entropy loss)
+        wstore (numpy array) : last set of weights entered
+        pestore (float) : potential energy for wstore
+        fstore (numpy array) : forces for wstore
+
     """
     def __init__(self,images,labels, n_input_nodes, n_nodes_h_layers, n_output_classes, n_h_layers ):
         self.criterion = nn.CrossEntropyLoss(reduction='sum')
@@ -217,7 +239,7 @@ class NNPeForces():
             w:  1-d numpy array of floats specifying the parameters of the neural network.
          
         Return:
-        initial_param (list) :: List of lists containing the weights and bias values for neurons in 
+        initial_param (list) : List of lists containing the weights and bias values for neurons in 
             each layer. Each element of initial_param refers to a seperate layer of the network.
             The 0th element refers to the first layer and the last element to the output layer.
             Each element of initial_param has the form [weights, biases] where
@@ -292,15 +314,15 @@ def build_data_general(fulltrain_dataset, fulltest_dataset, image_sidel_use, \
     Args: 
         fulltrain_dataset: Full training data set from which samples will be chosen or read.
         fulltest_dataset: The full test set.
-        image_sidel_use (int) :: Images will be transformed to have this many pixels along the side.
-        target_n_per_class (int) :: Number of stratified samples to draw per class. If there are fewer
+        image_sidel_use (int) : Images will be transformed to have this many pixels along the side.
+        target_n_per_class (int) : Number of stratified samples to draw per class. If there are fewer
             than target_n_per_class items in a class in fulltrain_dataset then, all the data in that 
             class will be returned.
-        indices_file (str) :: name of file for storing or recovering the indicies of data points in 
+        indices_file (str) : name of file for storing or recovering the indicies of data points in 
             fulltrain_dataset which comprise the stratified sample. If this file exists, the indicies 
             of the data points are read from the file. If the file does not exist then it is created 
             and the indicies of a random stratified data sample are written there.
-        append_test (logical) :: If True, then the remaining data excluded from the stratified sample,
+        append_test (logical) : If True, then the remaining data excluded from the stratified sample,
             is appended to the test set data. Default=True.
 
 
@@ -370,7 +392,7 @@ def sampleFromClass(dataset, target_num_per_class):
     
     Args:
         dataset: PyTorch data set
-        target_num_per_class (int) :: Number of stratified samples to draw per class. If there are 
+        target_num_per_class (int) : Number of stratified samples to draw per class. If there are 
             fewer than target_n_per_class items in a class in fulltrain_dataset then, all the data 
             in that class will be returned.
 
@@ -412,10 +434,10 @@ def calc_fan_in(n_inputs_nodes,n_h_layers,nodes_per_h_layer,n_classes):
     node as a float. The fan in is the number of inwards pointing weights + 1.
     
     Args:
-        n_input_nodes (int) :: the number of input nodes
-        n_h_layers (int) :: the number of hidden layers
-        nodes_per_h_layers (int) :: the number of nodes in each hidden layer
-        n_classes (int) :: the number of nodes in the final (output) layer
+        n_input_nodes (int) : the number of input nodes
+        n_h_layers (int) : the number of hidden layers
+        nodes_per_h_layers (int) : the number of nodes in each hidden layer
+        n_classes (int) : the number of nodes in the final (output) layer
 
     Return:
         fan:    1-d numpy array, with one element for each parameter in the network, each specifying

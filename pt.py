@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+"""This module implements parallel tempering."""
+
 import sampling
 from pathos.multiprocessing import ProcessPool
 import numpy as np
@@ -8,10 +11,64 @@ import os.path
 import time
 
 def build_pt(sampler_classobj, pe_method, force_method, numdim = 5, masses = np.ones(5), \
-    nT = 10, nproc = 1, Tmin = 1.0, Tmax = 100.0, iteration = 0, max_iteration = 500, iters_to_swap = 1, \
-    iters_to_waypoint = 100, iters_to_setdt = 10, iters_to_writestate = 100, run_token = 1, \
-    dt = 1.0e-4, traj_len = 100, num_traj = 10, absxmax = 1.0e2, dt_max = None, \
-    min_rate = 0.6, max_rate = 0.7, gaussianprior_std = None, initial_rand_bounds = 1.0e2):
+    nT = 10, nproc = 1, Tmin = 1.0, Tmax = 100.0, max_iteration = 500, iters_to_swap = 1, \
+    iters_to_waypoint = 5, iters_to_setdt = 10, iters_to_writestate = 1, run_token = 1, \
+    dt = 1.0e-4, traj_len = 100, num_traj = 10, absxmax = 1.0e2, initial_rand_bounds = 1.0e2, \
+    dt_max = None, min_rate = 0.6, max_rate = 0.7, gaussianprior_std = None):
+    """Builds an instance of ParallelTempering. Reads restart file if it exists, or initialises a 
+    fresh run.
+    
+    Args:
+        sampler_classobj : Sampler class object from module sampling. Eg. sampling.Hmc .
+        pe_method : A method for evaluating the potential energy.
+        force_method : A method for evaluating the forces.
+        numdim (int) :The number of dimensions of the configuration space ('parameter space'). 
+            (Defualt: 5)
+        masses (single float or numpy array of floats, with length 1 or length numdim): specifies the
+            masses associated with each dimension of the configuration space ('parameter space'). 
+            (Default: np.ones(5))
+        nT (int) : Number of temperatures to use. (Default: 10)
+        nproc (int) : Number of processors to use. (Default: 1)
+        Tmin (float) : Lowest temperature in ladder of temperatures. (Default 1.0)
+        Tmax (float) : Maximum temperature in ladder of temperatures. (Default 100.0).
+        max_iteration (int) : Max number of iterations to run. (Default 500).
+        iters_to_swap (int) : Configuration swaps between neighbouring temperatures are attempted
+            every iters_to_swap iterations. (Default 1).
+        iters_to_waypoint (int) : Restart information is written after every iters_to_waypoint 
+            iterations. (Default 5). 
+        iters_to_setdt (int) : The step sizes (or equivalently time steps) are updated after every 
+            iters_to_setdt interations. (Default 10).
+        iters_to_writestate (int) : The latest potential energy values and coordinates are written
+            out after every iters_to_writestate iterations. (Default 1).
+        run_token (int) : An integer for labelling the restart and output files for this calculation.
+            (Default 1).
+        dt (float) : Initial time step (or step size). This will be updated algorithmically, but a 
+            good starting point saves time. (Default 1.0e-4).
+        traj_len (int) : The number of time steps in a single trajectory. (Default 100).
+        num_traj (int) : The number of trajectories run per iteration, per sampler. (Default 10).
+        absxmax (single float or numpy array of floats, with length 1 or length numdim) : During the 
+            main calculation, the sampler is restricted to a region x in [-absxmax,absxmax]. 
+            (Default: 1.0e2).
+        initial_rand_bounds : The same as absxmax, but applied only during random initialisation of the
+            sampler's coordinate (parameters). This enables initialisation into a particular region, 
+            which might for example, be most likely to contain the global minimum. (Default: 1.0e2).
+        dt_max (float) : maximum step size (time step). (Default: median(absxmax), which is set in 
+            module sampling.)
+        min_rate (float) : minimum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default: 0.6. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        max_rate (float) : maximum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default 0.7. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        gaussianprior_std (single float or numpy array of floats, with length 1 or length numdim) : If 
+            this is set to a real value then an additional term is applied to (H)MC acceptance/rejection 
+            such that the target distribution is proportional to a multivariate Gaussian with this 
+            standard deviation for each dimension. (Default: None.)
+
+    Return:
+        ParallelTempering class object
+
+    """
 
     # CHECK FOR RESTART FILE AND DO RESTART IF PRESENT
     restrtfl = "restart_pt_"+str(run_token)+".txt"
@@ -24,6 +81,7 @@ def build_pt(sampler_classobj, pe_method, force_method, numdim = 5, masses = np.
 
     else:
         didrestart = False
+        iteration = 0
         # a list of new walkers (which are class objects)
         samplers = build_samplers( sampler_classobj, pe_method, force_method, nT, Tmin, Tmax, dt, \
             traj_len, absxmax, dt_max, min_rate, max_rate, gaussianprior_std )
@@ -64,8 +122,38 @@ def build_pt(sampler_classobj, pe_method, force_method, numdim = 5, masses = np.
 def build_samplers( sampler_classobj, pe_method, force_method, nT = 10, Tmin = 1.0, \
     Tmax = 100.0, dt = 1.0e-4, traj_len = 100, absxmax = 1.0e2, dt_max = None, min_rate = 0.6, \
     max_rate = 0.7, gaussianprior_std = None ):
-    """Builds a list of samplers using ptparams. sampler_classobj should be an sampler class
-    from module sampling. For example, "sampling.Hmc"."""
+    """Builds a list of nT samplers with temperatures evenly spaced on a log scale from Tmin to Tmax. 
+    
+    Args:
+        sampler_classobj : Sampler class object from module sampling. Eg. sampling.Hmc
+        pe_method : A method for evaluating the potential energy.
+        force_method : A method for evaluating the forces.
+        nT (int) : Number of temperatures to use. (Default: 10)
+        Tmin (float) : Lowest temperature in ladder of temperatures. (Default 1.0)
+        Tmax (float) : Maximum temperature in ladder of temperatures. (Default 100.0).
+        dt (float) : Initial time step (or step size). This will be updated algorithmically, but a 
+            good starting point saves time. (Default 1.0e-4).
+        traj_len (int) : The number of time steps in a single trajectory. (Default 100).
+        absxmax (single float or numpy array of floats, with length 1 or length numdim) : During the 
+            main calculation, the sampler is restricted to a region x in [-absxmax,absxmax]. 
+            (Default: 1.0e2).
+        dt_max (float) : maximum step size (time step). (Default: median(absxmax), which is set in 
+            module sampling.)
+        min_rate (float) : minimum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default: 0.6. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        max_rate (float) : maximum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default 0.7. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        gaussianprior_std (single float or numpy array of floats, with length 1 or length numdim) : If 
+            this is set to a real value then an additional term is applied to (H)MC acceptance/rejection, 
+            such that the target distribution is proportional to a multivariate Gaussian with this 
+            standard deviation for each dimension. (Default: None.)
+
+    Return:
+        List of sampler_classobj objects, with Temperatures in accending order.
+
+    """
 
     samplers = []
     for i in xrange(nT):
@@ -75,11 +163,70 @@ def build_samplers( sampler_classobj, pe_method, force_method, nT = 10, Tmin = 1
     return samplers
 
 class ParallelTempering:
-    """This class implements a generic PT algorithm."""
+    """This class implements a generic PT algorithm.
+    
+    Args:
+        samplers : list of samplers. Could for example be built with build_samplers
+        walkers : numpy array of sampling.NewWalker objects
+        num_traj (int) : The number of trajectories run per iteration, per sampler. (Default 10).
+        nT (int) : Number of temperatures to use. (Default: 10)
+        nproc (int) : number of processes to use in pathos multiprocessing
+        Tmin (float) : Lowest temperature in ladder of temperatures. (Default 1.0)
+        Tmax (float) : Maximum temperature in ladder of temperatures. (Default 100.0).
+        iteration (int) : starting value of iteration counter (Default 0. May differ when restarting calc)
+        max_iteration (int) : Max number of iterations to run. (Default 500).
+        iters_to_swap (int) : Configuration swaps between neighbouring temperatures are attempted
+            every iters_to_swap iterations. (Default 1).
+        iters_to_waypoint (int) : Restart information is written after every iters_to_waypoint 
+            iterations. (Default 5). 
+        iters_to_setdt (int) : The step sizes (or equivalently time steps) are updated after every 
+            iters_to_setdt interations. (Default 10).
+        iters_to_writestate (int) : The latest potential energy values and coordinates are written
+            out after every iters_to_writestate iterations. (Default 1).
+        run_token (int) : An integer for labelling the restart and output files for this calculation.
+            (Default 1).
+        coutfl (str) : File name for writing out configurations (parameter values) every 
+            iters_to_writestate iterations. (Default: 'ptconfsout_1.txt'.)
+        ptoutfl (str) : File name for writing out all pe values every iters_to_writestate iterations. 
+            (Default: 'ptout_1.txt'.)
+        restrtfl (str) : File name for restart file. File is updated every iters_to_waypoint iterations.
+            (Default: 'restart_pt_1.txt'.)
+
+    Attributes:
+        samplers : list of samplers. Could for example be built with build_samplers
+        walkers : numpy array of sampling.NewWalker objects
+        num_traj (int) : The number of trajectories run per iteration, per sampler. (Default 10).
+        nT (int) : Number of temperatures to use. (Default: 10)
+        nproc (int) : number of processes to use in pathos multiprocessing
+        Tmin (float) : Lowest temperature in ladder of temperatures. (Default 1.0)
+        Tmax (float) : Maximum temperature in ladder of temperatures. (Default 100.0).
+        iteration (int) : starting value of iteration counter (Default 0. May differ when restarting calc)
+        max_iteration (int) : Max number of iterations to run. (Default 500).
+        iters_to_swap (int) : Configuration swaps between neighbouring temperatures are attempted
+            every iters_to_swap iterations. (Default 1).
+        iters_to_waypoint (int) : Restart information is written after every iters_to_waypoint 
+            iterations. (Default 5). 
+        iters_to_setdt (int) : The step sizes (or equivalently time steps) are updated after every 
+            iters_to_setdt interations. (Default 10).
+        iters_to_writestate (int) : The latest potential energy values and coordinates are written
+            out after every iters_to_writestate iterations. (Default 1).
+        run_token (int) : An integer for labelling the restart and output files for this calculation.
+            (Default 1).
+        coutfl (str) : File name for writing out configurations (parameter values) every 
+            iters_to_writestate iterations. (Default: 'ptconfsout_1.txt'.)
+        ptoutfl (str) : File name for writing out all pe values every iters_to_writestate iterations. 
+            (Default: 'ptout_1.txt'.)
+        restrtfl (str) : File name for restart file. File is updated every iters_to_waypoint iterations.
+            (Default: 'restart_pt_1.txt'.)
+        pt_pool : pathos ProcessPool with nproc workers
+        pt_trajs : a list of sampling.Traj objects constructed from the input list samplers, and in the 
+            same order.
+
+    """
 
     def __init__(self, samplers, walkers, num_traj = 10, nT = 10, nproc = 1, Tmin = 1.0, \
-        Tmax = 100.0, iteration = 0, max_iteration = 500, iters_to_swap = 1, iters_to_waypoint = 100, \
-        iters_to_setdt = 10, iters_to_writestate = 100, run_token = 1, coutfl = "ptconfsout_1.txt", \
+        Tmax = 100.0, iteration = 0, max_iteration = 500, iters_to_swap = 1, iters_to_waypoint = 5, \
+        iters_to_setdt = 10, iters_to_writestate = 1, run_token = 1, coutfl = "ptconfsout_1.txt", \
         ptoutfl = "ptout_1.txt", restrtfl = "restart_pt_1.txt"):
 
         self.samplers = samplers
@@ -146,6 +293,15 @@ class ParallelTempering:
                 self.write_state()
 
     def pt_swaps(self):
+        """Implements Monte Carlo swaps of the coordinates between neighbouring temperatures, 
+        such that the joint distribution is correctly sampled both after and before the swaps.
+
+        Return:
+            successes : 1-d numpy array of floats signaling successful swaps between temperature 
+                pairs.
+            attempts : 1-d numpy array of floats signaling attempted swaps between temperature pairs.
+
+        """
 
         # build a list of adjacent integers, of even length, equally likely to start with 0 or 1
         start = int( np.random.uniform()<0.5 )
@@ -175,7 +331,11 @@ class ParallelTempering:
         return successes, attempts
 
     def propagate_parallel(self):
-        """Propagates a number of walkers with different samplers, in parallel."""
+        """Propagates all of self.walkers with self.pt_trajs, in parallel.
+        
+        Return:
+            walkers : propagated walkers.
+        """
 
         def one_run(i):
             np.random.seed()    # reinitialise the random seed, otherwise the trajectories 
@@ -189,8 +349,7 @@ class ParallelTempering:
         return walkers
 
     def set_dt_all(self, pool, step_fac = 0.9):
-        """Sets timesteps for all samplers. These routines are already parallel, 
-        so each dt is set in series.""" 
+        """Sets timesteps (dt) for all self.pt_trajs in parallel.""" 
 
         def set_one_dt(i):
             np.random.seed()
@@ -210,7 +369,7 @@ class ParallelTempering:
             self.pt_trajs[i].sampler.dt = dts[i]
 
     def write_waypoint(self):
-        """Writes the waypoint file"""
+        """Writes the waypoint file to self.restrtfl"""
 
         ptparams = {}
         ptparams["nT"] = self.nT
@@ -274,7 +433,20 @@ class ParallelTempering:
 
 def ith_temperature(Tmin,Tmax,nT,i, series_type = "geometric"):
     """Gives the ith temperature in a geometric or arithmetic progression from Tmin to Tmax,
-    with i in [0,1,...,nT-1]. series_type must be either "geometric" or "arithmetic"."""
+    with i in [0,1,...,nT-1]. series_type must be either "geometric" or "arithmetic".
+    
+    Args:
+        
+        Tmin (float) : Lowest temperature in ladder of temperatures. (Default 1.0)
+        Tmax (float) : Maximum temperature in ladder of temperatures. (Default 100.0).
+        nT (int) : Number of temperatures to use. (Default: 10)
+        i (int) : specifies the temperature as described above.
+        series_type (str) : specifies the series of temperatures, as described above. Must be 
+            'geometric' or 'arithmetic'. (Default: 'geometric'.)
+
+    Return:
+        T (float) : output temperature.
+    """
 
     if (nT<=1):
         T = Tmin
@@ -289,8 +461,25 @@ def ith_temperature(Tmin,Tmax,nT,i, series_type = "geometric"):
 
     return T
 
-def read_waypoint(restrtfl, sampler_classobj, pe_method,force_method):
-    """Reads the waypoint file"""
+def read_waypoint(restrtfl, sampler_classobj, pe_method, force_method):
+    """Reads a waypoint
+    
+    Args:
+        restrtfl (str) : file from which to read waypoint
+        sampler_classobj : Sampler class object from module sampling. Eg. sampling.Hmc .
+        pe_method : A method for evaluating the potential energy.
+        force_method : A method for evaluating the forces.
+
+    Return:
+        nT (int) : Number of temperatures to use. (Default: 10).
+        Tmin (float) : Lowest temperature in ladder of temperatures. (Default 1.0)
+        Tmax (float) : Maximum temperature in ladder of temperatures. (Default 100.0).
+        iteration (int) : value of iteration counter when waypoint was written.
+        num_traj (int) : The number of trajectories run per iteration, per sampler. (Default 10).
+        samplers : list of sampler objects from sampling module.
+        walkers : numpy array of sampling.NewWalker objects.
+    """
+
     walkers = np.asarray([])
     samplers = []
     with open(restrtfl) as rin:
@@ -328,9 +517,15 @@ def initialise_walker(sampler):
     """Robust function for initialising a walker at fixed temperature. 
     1. Generate random configuration. 
     2. Minimise potential energy function. 
-    3. Slowly thermalise (reheat) that walker to target temperature.
-    Exceptionally, this routine assumes that numdim and masses are part of sampler. This is for ease of passing
-    to pathos."""
+    3. Set stepsize and equilibrate that walker to target temperature.
+
+    Args:
+        sampler : sampling module sampler object
+
+    Return:
+        walker, sampler : walker (sampling.NewWalker object) and sampler (with dt updated).
+
+    """
 
     max_num_trials = 10    # robust default value
 
@@ -359,6 +554,18 @@ def initialise_walker(sampler):
     return walker, sampler
 
 def rough_minimise(walker, sampler, nsteps = 1000):
+    """Implements a rough minimisation strategy. Initially momenta are set to zero. Then the system's
+    sampler is used to propagate the walker approximately down hill. At each step, if the
+    potential energy decreases, the time step is increased by 0.05. However, if the potential
+    energy increases during a timestep, then the walker moves backwards one timestep (to the
+    lowest point on the trajectory so far), the momenta are reset to 0, and the timestep is
+    multiplied by 0.95.
+
+    Args:
+        walker : sampling.NewWalker object
+        sampler : sampling module sampler object
+        nsteps (int) : total number of timesteps to take (Default: 1000).
+    """
 
     save_dt = sampler.dt
 
@@ -383,7 +590,16 @@ def rough_minimise(walker, sampler, nsteps = 1000):
     return walker
 
 def thermalise_walker(walker,sampler, ntraj):
-    """Set rough step length and do ntraj trajectories of burn in."""
+    """Equilibrate walker at temperature 1.0/sampler.beta . Sets dt before and after equilibration.
+    
+    Args:
+        walker : sampling.NewWalker object
+        sampler : sampling module sampler object
+        ntraj (int) : number of trajectories to run during equilibration.
+
+    Return:
+        walker, sampler : walker and sampler (dt updated)
+    """
 
     this_sampler = copy.deepcopy(sampler)
 
