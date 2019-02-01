@@ -10,7 +10,7 @@ RUNTOKEN = 1
 NPROC = 16
 NT = 16
 TMIN = 1.0e-2
-TMAX = (1.0e2)
+TMAX = (1.0e0)
 ABSXMAXFAC = 1.0e3
 GPRIOR_STD = None
 DT_INITIAL = 1.0e-1
@@ -60,11 +60,11 @@ nnpef = nn_pe_force.build_repeatable_NNPeForces(indfl = DATAFILE,image_sidel_use
 # initialise random walkers or read restart file.
 # initialise parallel tempering object.
 thispt = pt.build_pt(sampling.Hmc, pe_method = nnpef.pe, force_method = nnpef.forces, numdim = nd, \
-    masses = these_masses, nT = NT, nproc = NPROC, Tmin = TMIN, Tmax = TMAX, iteration = 0, \
+    masses = these_masses, nT = NT, nproc = NPROC, Tmin = TMIN, Tmax = TMAX, \
     max_iteration = MAXITER, iters_to_swap = ITERSTOSWAP, iters_to_waypoint = ITERSTOWAYPOINT, \
     iters_to_setdt = ITERSTOSETDT, iters_to_writestate = ITERSTOWRITESTATE, run_token = RUNTOKEN, \
     dt = DT_INITIAL, traj_len = TRAJ_LEN, num_traj = NUM_TRAJ, absxmax = ABSXMAXFAC*intial_absxmax, \
-    gaussianprior_std = GPRIOR_STD, initial_rand_bounds = intial_absxmax )
+    initial_rand_bounds = intial_absxmax, gaussianprior_std = GPRIOR_STD )
 
 # update boundaries on parameters, for softer prior.
 for this_traj in thispt.pt_trajs:
