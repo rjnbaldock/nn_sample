@@ -175,7 +175,7 @@ class Gmc(Sampler):
     """gmc sampler contains propagator, log_accept_prob and mom_update methods for gmc with total
     momentum randomisation."""
 
-    def __init__(self, pe_method,force_method, dt = 0.1, traj_len = 100, absxmax = 1.0e2, dt_max = None, emax = sys.float_info.max, min_rate = 0.6, max_rate = 0.7):
+    def __init__(self, pe_method,force_method, dt = 0.1, traj_len = 100, absxmax = 1.0e2, dt_max = None, emax = sys.float_info.max, min_rate = 0.6, max_rate = 0.7, gaussianprior_std = None):
 
         Sampler.__init__(self)
         self.name = 'gmc'
@@ -193,6 +193,11 @@ class Gmc(Sampler):
         else:
             self.dt_max = dt_max
         self.must_copy_p = False
+
+        if (gaussianprior_std is not None):
+            print "Sampler GMC only permits gaussianprior_std = None.",\
+                " Got gaussianprior_std = ",gaussianprior_std
+            print "Setting gaussianprior_std = None"
         self.gaussianprior_std = None
 
     def propagate(self,walker):
