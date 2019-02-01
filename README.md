@@ -16,9 +16,9 @@ $ export OMP_NUM_THREADS=1
 $ python pt_nn.py
 ```
 
-Setting 
+Doing 
 ```
-OMP_NUM_THREADS=1
+export OMP_NUM_THREADS=1
 ```
 is important for good performance when combining pathos multiprocessing and PyTorch.
 
