@@ -1,3 +1,8 @@
+#!/usr/bin/env python
+"""This module implements Hamiltonian Monte Carlo and Galilean Monte Carlo samplers. It also contains 
+routines for automatically setting the time step according to the acceptance rate of additional, 
+independent trajectories. """
+
 import numpy as np
 import sys
 import copy
@@ -9,9 +14,46 @@ import json
 
 class NewWalker:
     """Either creates a new random walker with coordinates uniformly randomly chosen from 
-    [-absxmax,+absxmax]. Handles missing data."""
+    [-absxmax,+absxmax], or creates a clone of an existing walker. Handles missing data.
+    Class attribute numdim must be set at the start of any code that uses this class.
+    
+    Args:
+        absxmax (single float or numpy array of floats, with length 1 or length numdim) : if x is None, 
+            coordinates (parameters) are randomly initialised from [-absxmax,+absxmax].
+        sampler_name (str) : 'hmc' or 'gmc'. Specifies the sampler - necessary to specify the marginal 
+            distribution for the momenta, in case the momenta need to be initialised.
+        pe_method : A method for evaluating the potential energy. Must be specified if x is None. 
+            (Default: None).
+        x (None or numpy array of floats, with length numdim) : If x is None then the coordinates are 
+            randomly chosen from a uniform distribution on [-absxmax,+absxmax]. If x is not None, then 
+            the coordinates of the walker set to x. (Default: None.) 
+        p (None or numpy array of floats, with length numdim) : If p is None then the momenta are randomly
+            chosen from the marginal distribution for p as appropriate to sampler_name. If p is not None, 
+            then the momenta of the walker set to p. (Default: None.) 
+        pe (None or float) : If pe is None then the potential energy of the walker is calculated using 
+            pe_method. If pe is not none then the pe for the new walker is set equal to pe. At least one 
+            of pe or pe_method must be specified. (Default: None.)
+        ke (None or float) : If ke is None then the kinetic energy of the walker is calculated. If At 
+            least one of pe or pe_method must be specified. (Default: None.)
+        beta (None or float) : 1/Temperature. beta is required if p is None and sampler_name=='hmc'. 
+            Specifies the marginal distribution for the momenta.
 
-    masses = None
+    Class attributes:
+        numdim (int) : MUST BE SET AT START OF ANY CODE THAT USES THIS CLASS. Specifies the dimension of 
+            the coordinate (parameter) space for x. (Default: None.)
+        masses (single float or numpy array of floats, with length 1 or length numdim) : specifies the
+            masses for each dimension of x. If only a float or an array of length 1 is given then all
+            dimensions have the same mass. (Default 1.0).
+
+    Class instance attributes:
+        x (numpy array of floats, with length numdim) : The coordinates (parameters) of the walker.
+        p (numpy array of floats, with length numdim) : The momentum of the walker.
+        pe (float) : The potential energy of the walker.
+        ke (float) : The kinetic energy of the walker.
+
+    """
+
+    masses = 1.0
     numdim = None
 
     def __init__(self, absxmax, sampler_name, pe_method = None, \
@@ -53,7 +95,16 @@ class NewWalker:
 
 class Traj:
     """ This class implements a hmc (or gmc) trajectory.
-    Note that GMC is a form of hmc."""
+    
+    Args:
+        sampler : a sampler object
+        num_traj (int) : The number of trajectories to be performed in series.
+
+    Attributes:
+        sampler : a sampler object
+        num_traj (int) : The number of trajectories to be performed in series.
+
+    """
 
     def __init__(self, sampler, num_traj = 1):
         self.sampler = sampler          # a class with methods
@@ -70,16 +121,34 @@ class Traj:
 
     @staticmethod
     def ke(momenta,masses):
-        """A function for calculating the kinetic energy of the sampler."""
+        """A function for calculating the kinetic energy of the sampler.
+        
+        Args:
+            momenta (numpy array of floats) : momenta
+            masses (float or numpy array of floats, with length 1 or same length as momenta)
+
+        Return:
+            ke = sum_{i}{ momenta_i**2 / 2*masses_i }
+        
+        """
 
         ke = 0.5 * np.sum((momenta**2) / masses)    # ke = (p^2)/(2m)
 
         return ke
 
     def run(self,walker_in):
-        """Run one H(G)MC trajectory 1. Stochastic momentum update. 2. Propagate dynamics.
+        """Run one H(G)MC trajectory 
+        1. Stochastic momentum update. 
+        2. Propagate dynamics.
         3. Do accept/reject. If trajectory rejected, flip momenta, so that the trajectory 
         ends as just before step 2, but with the momenta reversed.
+
+        Args:
+            walker_in : an instance of NewWalker
+
+        Return:
+            walker_out : walker_in after propagation
+            traj_accepted (bool) : True if trajectory was accepted; False if trajectory was not accepted.
         """
         # walker_in is a class containting the the initial starting 
         # configuration (x) and momenta (p), as well as the initial
@@ -142,7 +211,14 @@ class Traj:
         return walker_out, traj_accepted
 
     def run_serial(self,walker):
-        """This method does Traj.run on walker, num_traj times in a row."""
+        """This method does Traj.run on walker, num_traj times in a row.
+        
+        Args:
+            walker : an instance of NewWalker
+
+        Return:
+            buf : walker after propagation with num_traj trajectories in series.
+        """
 
         buf = copy_walker(walker, self.sampler.must_copy_p)
         srate = 0
@@ -161,21 +237,99 @@ class Sampler:
 
     @abc.abstractmethod
     def propagate(self, walker):
+        """Propagates walker through one timestep.
+        
+        Args: 
+            walker : instance of NewWalker
+
+        Return:
+            walker : walker in, but propagated through one timestep.
+        """
         pass
 
     @abc.abstractmethod
     def log_accept_prob(self, inout_vals):
+        """Calculate the natural logarithm of the acceptance probability for a trajectory.
+        
+        Args:
+            inout_vals (dict) : contains the items required to calculate log_accept_prob
+
+        Return:
+            log_accept_prob (float) : natural logarithm of the MC acceptance probability for a trajectory.
+        """
         pass
 
     @abc.abstractmethod
     def mom_update(p, numdim, masses, beta):
+        """Update the momenta p. This may mean either partial or complete momentum randomisation, 
+        depending on the sampler.
+        
+        Args:
+            p (numpy array of floats) : initial momenta array (for total momentum randomisation this is 
+                discarded)
+            numdim (int) : length of output momentum array
+            masses (single float or numpy array of floats, with length 1 or length numdim): specifies the
+                masses associated with each dimension of the configuration space ('parameter space'). 
+            beta (float) : 1.0/Temperature. The value is only important for HMC.
+
+        Return:
+            pout (numpy array of floats, length numdim) : Momenta out.
+        """
         pass
 
 class Gmc(Sampler):
-    """gmc sampler contains propagator, log_accept_prob and mom_update methods for gmc with total
-    momentum randomisation."""
+    """GMC sampler class. Appart from questions of ergodicity, GMC converges to a top hat distribution,
+    that has fixed uniform weight within the region pe<=emax, and zero weight for pe>emax.
+    
+    Args:
+        pe_method : A method for evaluating the potential energy. 
+        force_method : A method for evaluating the forces.
+        dt (float) : Initial time step (or step size). This may be updated algorithmically later, but a 
+            good starting point saves time. (Default 0.1).
+        traj_len (int) : The number of time steps in a single trajectory. (Default 100).
+        absxmax (single float or numpy array of floats, with length 1 or length equal to dimension of 
+            the parameter space) : The sampler is restricted to a region x in [-absxmax,absxmax]. 
+            (Default: 1.0e2).
+        dt_max (float) : maximum timestep. (Default: median(absxmax))
+        emax (float) : GMC converges to a top hat distribution with fixed uniform weight within the 
+            region pe<=emax, and zero weight for pe>emax. (Default: sys.float_info.max which is the 
+            largest value a float can store.)
+        min_rate (float) : minimum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default: 0.6. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        max_rate (float) : maximum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default 0.7. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        gaussianprior_std : This is included for compatability with other samplers. For now this must be 
+            set to None, otherwise an error is thrown.
 
-    def __init__(self, pe_method,force_method, dt = 0.1, traj_len = 100, absxmax = 1.0e2, dt_max = None, emax = sys.float_info.max, min_rate = 0.6, max_rate = 0.7, gaussianprior_std = None):
+    Attributes:
+        name : 'gmc' (hardcoded). This is the name of the sampler.
+        pe_method : A method for evaluating the potential energy. 
+        force_method : A method for evaluating the forces.
+        dt (float) : Initial time step (or step size). This may be updated algorithmically later, but a 
+            good starting point saves time. (Default 0.1).
+        traj_len (int) : The number of time steps in a single trajectory. (Default 100).
+        absxmax (single float or numpy array of floats, with length 1 or length equal to dimension of 
+            the parameter space) : The sampler is restricted to a region x in [-absxmax,absxmax]. 
+            (Default: 1.0e2).
+        dt_max (float) : maximum timestep. (Default: median(absxmax))
+        emax (float) : GMC converges to a top hat distribution with fixed uniform weight within the 
+            region pe<=emax, and zero weight for pe>emax. (Default: sys.float_info.max which is the 
+            largest value a float can store.)
+        min_rate (float) : minimum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default: 0.6. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        max_rate (float) : maximum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default 0.7. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        gaussianprior_std : This is included for compatability with other samplers. For now, if this is
+            not None then it is reset to None and an error message is displayed.
+
+    """
+
+    def __init__(self, pe_method,force_method, dt = 0.1, traj_len = 100, absxmax = 1.0e2, dt_max = None, \
+        emax = sys.float_info.max, min_rate = 0.6, max_rate = 0.7, gaussianprior_std = None):
 
         Sampler.__init__(self)
         self.name = 'gmc'
@@ -202,7 +356,14 @@ class Gmc(Sampler):
 
     def propagate(self,walker):
         """Does one dt of GMC propagation. A propagator updates x and p. If pe and/or ke have
-        not been explicitly re-evaluated at the end of the trajectory, then they are set to None."""
+        not been explicitly re-evaluated at the end of the trajectory, then they are set to None.
+        
+        Args: 
+            walker : instance of NewWalker
+
+        Return:
+            walker : walker in, but propagated through one timestep.
+        """
 
         walker.pe, walker.ke = None, None
 
@@ -218,8 +379,15 @@ class Gmc(Sampler):
         return walker
 
     def log_accept_prob(self,inout_vals):
-        """Returns 1.0 if inout_vals["pe_final"] < self.emax and 0.0 otherwise.
-            ener_new should be the current potential energy."""
+        """Calculate the natural logarithm of the acceptance probability for a trajectory.
+
+        Args:
+            inout_vals (dict) : dictionary that must contain item ("pe_final", (float)).
+
+        Return:
+            log_accept_prob (float) : 0.0 if inout_vals["pe_final"] < self.emax and 
+                -sys.float_info.max otherwise.
+        """
 
         if (inout_vals["pe_final"] < self.emax):
             logprob = 0.0
@@ -228,17 +396,77 @@ class Gmc(Sampler):
         return logprob
 
     @staticmethod
-    def mom_update(p = None, numdim = 5, masses = np.ones(5), beta = 1.0): # this routine can be
+    def mom_update(p = None, numdim = 5, masses = 1.0, beta = 1.0): # this routine can be
                                         # used stand alone function 
-        """Generates a random sample from the surface of a unit hypershpere centered at the origin in 
-        numdim dimensions."""
+        """Generates a random sample from the surface of a unit hypersphere centered at the origin in 
+        numdim dimensions.
+        
+        Args:
+            p (irrelevant) : This argument is reassigned, so it doesn't matter what is handed as 
+                input. (Default: None.)
+            numdim (int) : length of output momentum array (Default: 5)
+            masses (irrelevant) : This argument is not used, so it doesn't matter what is handed as
+                input. (Default: 1.0)
+            beta (irrelevant) : This argument is not used, so it doesn't matter what is handed as
+                input. (Default: 1.0)
+
+        Return:
+            pout (numpy array of floats, with length numdim) : a uniform random sample from the 
+                surface of a unit hypersphere centered at the origin
+
+        """
         pout = np.random.normal(size=numdim)
         pout /= np.linalg.norm(pout)
         return pout
 
 class Hmc(Sampler):
-    """Hmc sampler contains propagator, log_accept_prob and mom_update methods for hmc at fixed 
-    temperature with total momentum randomisation."""
+    """Hmc sampler class. Samples the Boltmann distribution in phase space.
+    
+    Args:
+        pe_method : A method for evaluating the potential energy. 
+        force_method : A method for evaluating the forces.
+        dt (float) : Initial time step (or step size). This may be updated algorithmically later, but a 
+            good starting point saves time. (Default 0.1).
+        traj_len (int) : The number of time steps in a single trajectory. (Default 100).
+        absxmax (single float or numpy array of floats, with length 1 or length equal to dimension of 
+            the parameter space) : The sampler is restricted to a region x in [-absxmax,absxmax]. 
+            (Default: 1.0e2).
+        dt_max (float) : maximum timestep. (Default: median(absxmax))
+        beta (float) : 1.0/Temperature for Boltzmann distribution. (Default: 1.0.)
+        min_rate (float) : minimum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default: 0.6. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        max_rate (float) : maximum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default 0.7. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        gaussianprior_std (single float or numpy array of floats, with length 1 or length numdim) : If 
+            this is set to a real value then an additional term is applied to (H)MC acceptance/rejection 
+            such that the target distribution is proportional to a multivariate Gaussian with this 
+            standard deviation for each dimension. (Default: None.)
+
+    Attributes:
+        name : 'gmc' (hardcoded). This is the name of the sampler.
+        pe_method : A method for evaluating the potential energy. 
+        force_method : A method for evaluating the forces.
+        dt (float) : Initial time step (or step size). This may be updated algorithmically later, but a 
+            good starting point saves time. (Default 0.1).
+        traj_len (int) : The number of time steps in a single trajectory. (Default 100).
+        absxmax (single float or numpy array of floats, with length 1 or length equal to dimension of 
+            the parameter space) : The sampler is restricted to a region x in [-absxmax,absxmax]. 
+            (Default: 1.0e2).
+        dt_max (float) : maximum timestep. (Default: median(absxmax))
+        beta (float) : 1.0/Temperature for Boltzmann distribution. (Default: 1.0.)
+        min_rate (float) : minimum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default: 0.6. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        max_rate (float) : maximum acceptance rate of trajectories. Used for setting step size (time 
+            step). (Default 0.7. The optimal acceptance rate for HMC on a multivariate Gaussian is 0.65
+            http://www.mcmchandbook.net/HandbookChapter5.pdf, section 5.4.4.3).
+        gaussianprior_std (single float or numpy array of floats, with length 1 or length numdim) : If 
+            this is set to a real value then an additional term is applied to (H)MC acceptance/rejection 
+            such that the target distribution is proportional to a multivariate Gaussian with this 
+            standard deviation for each dimension. (Default: None.)
+    """
 
     def __init__(self,pe_method, force_method, dt = 0.1, traj_len = 100, \
         absxmax = 1.0e2, dt_max = None, beta = 1.0, min_rate = 0.6, max_rate = 0.7, \
@@ -264,7 +492,15 @@ class Hmc(Sampler):
 
     def propagate(self,walker):
         """Does one dt of HMC propagation. A propagator updates x and p. If pe and/or ke have
-        not been explicitly re-evaluated at the end of the trajectory, then they are set to None."""
+        not been explicitly re-evaluated at the end of the trajectory, then they are set to None.
+        
+        Args: 
+            walker : instance of NewWalker
+
+        Return:
+            walker : walker in, but propagated through one timestep.
+        """
+
 
         walker.pe, walker.ke = None, None
 
@@ -278,25 +514,73 @@ class Hmc(Sampler):
         return walker
 
     def log_accept_prob(self,inout_vals):
-        """Returns exp(-beta *[total_energy_new - total_energy_old ])."""
+        """Calculate the natural logarithm of the acceptance probability for a trajectory.
+
+        Args:
+            inout_vals (dict) : dictionary that must contain items {("pe_final", (float)), 
+            ("ke_final", (float)), ("pe_initial", (float)), ("ke_initial", (float))} 
+            If self.gaussianprior_std is not None then inout_vals must also contain items
+            {("final_xsq", (float)), ("initial_xsq", (float))}.
+
+        Return:
+            If self.gaussianprior_std is None:
+                log_accept_prob (float) : (-beta *[total_energy_new - total_energy_old ])
+
+            If self.gaussianprior_std is not None:
+                log_accept_prob (float) : (-beta *[total_energy_new - total_energy_old ])
+                    - 0.5*(x_final^2 - x_initial^2)/self.gaussianprior_std**2
+        """
 
         logprob = - self.beta*( inout_vals["pe_final"] + inout_vals["ke_final"] \
             - inout_vals["pe_initial"] - inout_vals["ke_initial"] )
 
         if (self.gaussianprior_std is not None):
-            logprob += -(0.5/self.gaussianprior_std**2) * (inout_vals["final_xsq"] - inout_vals["initial_xsq"])
+            logprob += -(0.5/self.gaussianprior_std**2) * \
+                (inout_vals["final_xsq"] - inout_vals["initial_xsq"])
 
         return logprob
 
     @staticmethod
-    def mom_update(p = None, numdim = 5, masses = np.ones(5), beta = 1.0): 
-        """Generates a random sample from a numdim-d Gaussian, at the correct temperature."""
+    def mom_update(p = None, numdim = 5, masses = 1.0, beta = 1.0): 
+        """Generates a random sample from a numdim-d Gaussian, at the correct temperature.
+        
+        Args:
+            p (irrelevant) : This argument is reassigned, so it doesn't matter what is handed as 
+                input. (Default: None.)
+            numdim (int) : length of output momentum array (Default: 5)
+            masses (single float or numpy array of floats, with length 1 or length numdim) : specifie
+                the masses for each dimension of x. If only a float or an array of length 1 is given 
+                then all dimensions have the same mass. (Default 1.0).
+            beta (float) : 1.0/Temperature. (Default 1.0).
+
+        Return:
+            pout (numpy array of floats, with length numdim) : a random sample from a numdim-d 
+                Gaussian, at the correct temperature.
+        """
         pout = np.random.normal(scale=np.sqrt(masses/beta),size=numdim)
 
         return pout
 
 class UpdateDt(Traj):
-    """This class implements stepsize updating. """
+    """This class implements stepsize updating. 
+    
+    Args:
+        sampler : a Sampler class object.
+        nproc (int) : Number of processors to use for parallelisation. (Default: 1)
+        min_num_data_point (int) : Number of independent trajectories to run when estimating the
+            acceptance rate for a given timestep (sampler.dt). (Default: 10).
+        num_walkers (int) : Number of independent starting coordinates ('particles'/'walkers') that 
+            will be handed to the UpdateDt.set method. (Default: 1.)
+
+    Attributes:
+        sampler : a Sampler class object.
+        nproc (int) : Number of processors to use for parallelisation. (Default: 1)
+        min_num_data_point (int) : Number of independent trajectories to run when estimating the
+            acceptance rate for a given timestep (sampler.dt). (Default: 10).
+        num_walkers (int) : Number of independent starting coordinates ('particles'/'walkers') that 
+            will be handed to the UpdateDt.set method. (Default: 1.)
+
+    """
 
     def __init__(self, sampler, nproc = 1, min_num_data_point = 10, num_walkers = 1):
         Traj.__init__(self, sampler, 1)
@@ -308,7 +592,14 @@ class UpdateDt(Traj):
 
     def print_dt_change(self,old_dt,new_dt,message_prefix):
         """Prints a statement that step size has been updated from old_dt to new_dt. 
-        Print nothing if message_prefix is none."""
+        Print nothing if message_prefix is none.
+        
+        Args:
+            old_dt (float) : previous dt value
+            new_dt (float) : new dt value
+            message_prefix (str/None) : if message_prefix is not None, then a message is printed
+                describing the change in dt. If message_prefix is None, then no message is printed.
+        """
         if (message_prefix is not None):
             print message_prefix +' '+self.sampler.name," stepsize adjusted from %.3E to %.3E" % \
                 (old_dt, new_dt)
@@ -317,10 +608,20 @@ class UpdateDt(Traj):
     def set(self,walkers,message_prefix, adjust_step_factor = 0.9):
         """Updates the stepsize to achieve a trajectory acceptance rate in or as close as possible
         to the range [self.sampler.min_rate, self.sampler.max_rate], with stepsize in the range
-        [10^-50, self.sampler.dt_max]. adjust_step_factor: step size is updated by * or / by this value.
-        message_prefix is printed before any output. No output will be printed if 
-        message_prefix is None."""
+        [10^-50, self.sampler.dt_max]. 
+        
+        Args:
+            walkers : This MUST be an array or list of NewWalker class objects. These are NOT updated
+                by this method.
+            message_prefix (str/None) : if message_prefix is not None, then a message is printed
+                describing the change in dt. If message_prefix is None, then no message is printed.
+            adjust_step_factor (float) : self.sampler.dt is updated by * or / by this value.
 
+        Return:
+            duration (float) : duration of call to set in seconds. Can be useful for checking the 
+                fraction of time spent updating step lengths.
+
+        """
         start_time = time.time()
         if (self.nproc > 1):
             set_pool = ProcessPool(nodes=self.nproc)
@@ -420,7 +721,16 @@ class UpdateDt(Traj):
         return duration
 
 def copy_walker(walker_in, copy_p = False):
-    """Returns a copy of a walker"""
+    """Routine for efficiently copying a NewWalker class object.
+
+    Args:
+        walker_in (NewWalker class object) : walker to be copied
+        copy_p (bool) : If True, then the momenta walker_in.p will also be copied. If False then
+            the new walker has momenta p=1.0. In any case, the pe and ke values are correctly copied.
+    
+    Return:
+        walker_out (NewWalker class object) : copy of walker_in
+    """
 
     if (copy_p):
         walker_out = NewWalker( absxmax = None, sampler_name = None, x = walker_in.x, p = walker_in.p, \
@@ -432,7 +742,14 @@ def copy_walker(walker_in, copy_p = False):
     return walker_out
 
 def write_walker(walker,open_file,string_prefix):
-    """Write one walker."""
+    """Write one walker to file as json object.
+    
+    Args:
+        walker (NewWalker class object) : walker to be written out.
+        open_file : a file that is open for writing.
+        string_prefix (str) : a string written to open_file at the start of the line. The walker and 
+            string_prefix are written to a single line.
+    """
     wd = {}
     wd["x"] = walker.x.tolist()
     wd["p"] = walker.p.tolist()
@@ -443,7 +760,17 @@ def write_walker(walker,open_file,string_prefix):
     open_file.write(l)
 
 def apply_pool(pool, func, iters):
-    """If we are using only one processor, escape overhead of pathos multiprocessing"""
+    """Routine to apply pathos multiprocessing. Escapes the overhead of pathos multiprocessing if we 
+    are using only one processor by explicitly running in series.
+
+    Args:
+        pool : pathos ProcessPool class object.
+        func : function to be applied.
+        iters : list of inputs to which function should be applied.
+
+    Return:
+        outs : list of outputs from applying func to iters, in the same order as iters.
+    """
 
     if (pool is None):
         poolsize = 1
@@ -457,5 +784,12 @@ def apply_pool(pool, func, iters):
     return outs
 
 def exit_error(message, stat):
+    """Exit with a given message and error code.
+    
+    Args:
+        message (str) : message printed to stderr
+        stat (int) : error code
+    """
+
     sys.stderr.write(message)
     sys.exit(stat)
