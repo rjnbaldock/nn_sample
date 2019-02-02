@@ -10,7 +10,7 @@ from scipy.optimize import minimize
 import os.path
 import time
 
-def build_pt(sampler_classobj, pe_method, force_method, numdim = 5, masses = np.ones(5), \
+def build_pt(sampler_class, pe_method, force_method, numdim = 5, masses = np.ones(5), \
     nT = 10, nproc = 1, Tmin = 1.0, Tmax = 100.0, max_iteration = 500, iters_to_swap = 1, \
     iters_to_waypoint = 5, iters_to_setdt = 10, iters_to_writestate = 1, run_token = 1, \
     dt = 1.0e-4, traj_len = 100, num_traj = 10, absxmax = 1.0e2, initial_rand_bounds = 1.0e2, \
@@ -19,7 +19,7 @@ def build_pt(sampler_classobj, pe_method, force_method, numdim = 5, masses = np.
     fresh run.
     
     Args:
-        sampler_classobj : Sampler class object from module sampling. Eg. sampling.Hmc .
+        sampler_class : Sampler class from module sampling. Eg. sampling.Hmc .
         pe_method : A method for evaluating the potential energy.
         force_method : A method for evaluating the forces.
         numdim (int) :The number of dimensions of the configuration space ('parameter space'). 
@@ -77,13 +77,13 @@ def build_pt(sampler_classobj, pe_method, force_method, numdim = 5, masses = np.
 
         print "Restarting from file ",restrtfl,time.ctime()
         nT, Tmin, Tmax, iteration, num_traj, samplers, walkers = \
-            read_waypoint(restrtfl, sampler_classobj, pe_method, force_method)
+            read_waypoint(restrtfl, sampler_class, pe_method, force_method)
 
     else:
         didrestart = False
         iteration = 0
         # a list of new walkers (which are class objects)
-        samplers = build_samplers( sampler_classobj, pe_method, force_method, nT, Tmin, Tmax, dt, \
+        samplers = build_samplers( sampler_class, pe_method, force_method, nT, Tmin, Tmax, dt, \
             traj_len, absxmax, dt_max, min_rate, max_rate, gaussianprior_std )
 
         print "Start initialise walkers ",time.ctime()
@@ -119,13 +119,13 @@ def build_pt(sampler_classobj, pe_method, force_method, numdim = 5, masses = np.
 
     return thispt
 
-def build_samplers( sampler_classobj, pe_method, force_method, nT = 10, Tmin = 1.0, \
+def build_samplers( sampler_class, pe_method, force_method, nT = 10, Tmin = 1.0, \
     Tmax = 100.0, dt = 1.0e-4, traj_len = 100, absxmax = 1.0e2, dt_max = None, min_rate = 0.6, \
     max_rate = 0.7, gaussianprior_std = None ):
     """Builds a list of nT samplers with temperatures evenly spaced on a log scale from Tmin to Tmax. 
     
     Args:
-        sampler_classobj : Sampler class object from module sampling. Eg. sampling.Hmc
+        sampler_class : Sampler class from module sampling. Eg. sampling.Hmc
         pe_method : A method for evaluating the potential energy.
         force_method : A method for evaluating the forces.
         nT (int) : Number of temperatures to use. (Default: 10)
@@ -151,14 +151,14 @@ def build_samplers( sampler_classobj, pe_method, force_method, nT = 10, Tmin = 1
             standard deviation for each dimension. (Default: None.)
 
     Return:
-        List of sampler_classobj objects, with Temperatures in accending order.
+        List of sampler_class objects, with Temperatures in accending order.
 
     """
 
     samplers = []
     for i in xrange(nT):
         beta = 1.0/ith_temperature(Tmin, Tmax, nT, i)
-        samplers.append( sampler_classobj( pe_method, force_method, dt, traj_len, absxmax,\
+        samplers.append( sampler_class( pe_method, force_method, dt, traj_len, absxmax,\
         dt_max, beta, min_rate, max_rate, gaussianprior_std ) )
     return samplers
 
@@ -461,12 +461,12 @@ def ith_temperature(Tmin,Tmax,nT,i, series_type = "geometric"):
 
     return T
 
-def read_waypoint(restrtfl, sampler_classobj, pe_method, force_method):
+def read_waypoint(restrtfl, sampler_class, pe_method, force_method):
     """Reads a waypoint
     
     Args:
         restrtfl (str) : file from which to read waypoint
-        sampler_classobj : Sampler class object from module sampling. Eg. sampling.Hmc .
+        sampler_class : Sampler class from module sampling. Eg. sampling.Hmc .
         pe_method : A method for evaluating the potential energy.
         force_method : A method for evaluating the forces.
 
@@ -476,7 +476,7 @@ def read_waypoint(restrtfl, sampler_classobj, pe_method, force_method):
         Tmax (float) : Maximum temperature in ladder of temperatures. (Default 100.0).
         iteration (int) : value of iteration counter when waypoint was written.
         num_traj (int) : The number of trajectories run per iteration, per sampler. (Default 10).
-        samplers : list of sampler objects from sampling module.
+        samplers : list of sampling.Sampler objects.
         walkers : numpy array of sampling.NewWalker objects.
     """
 
@@ -501,7 +501,7 @@ def read_waypoint(restrtfl, sampler_classobj, pe_method, force_method):
                 del int_params["num_traj"]
                 del int_params["name"]
                 int_params["absxmax"] = np.asarray(int_params["absxmax"])
-                sampler = sampler_classobj(pe_method,force_method,**int_params)
+                sampler = sampler_class(pe_method,force_method,**int_params)
                 samplers.append(sampler)
 
             elif (label == "config"):
@@ -520,7 +520,7 @@ def initialise_walker(sampler):
     3. Set stepsize and equilibrate that walker to target temperature.
 
     Args:
-        sampler : sampling module sampler object
+        sampler : sampling.Sampler object
 
     Return:
         walker, sampler : walker (sampling.NewWalker object) and sampler (with dt updated).
@@ -563,7 +563,7 @@ def rough_minimise(walker, sampler, nsteps = 1000):
 
     Args:
         walker : sampling.NewWalker object
-        sampler : sampling module sampler object
+        sampler : sampling.Sampler object
         nsteps (int) : total number of timesteps to take (Default: 1000).
     """
 
@@ -594,7 +594,7 @@ def thermalise_walker(walker,sampler, ntraj):
     
     Args:
         walker : sampling.NewWalker object
-        sampler : sampling module sampler object
+        sampler : sampling.Sampler object
         ntraj (int) : number of trajectories to run during equilibration.
 
     Return:
