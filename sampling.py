@@ -635,13 +635,17 @@ class UpdateDt(Traj):
         walk_n_walkers = int(self.nproc * np.ceil(float(self.min_num_data_point)/self.nproc))
         # rounds up to next multiple of self.nproc for maximum usage of compute
 
+        walkers_clone = copy.deepcopy(walkers)  # expensive, but prevents this routine overwriting 
+                                                # walkers
+
         first_time = True # we will make at least two tries. Logical flag ensures this.
 
         # Step size calibration loop:
         while True:
 
             # collect statistics on trajectory acceptance rate
-            run_outputs = apply_pool(set_pool, self.run, np.random.choice(walkers,size=walk_n_walkers))
+            run_outputs = apply_pool(set_pool, self.run, np.random.choice(walkers_clone, \
+                size=walk_n_walkers))
             results = map(itemgetter(1), run_outputs)
             del run_outputs
 
