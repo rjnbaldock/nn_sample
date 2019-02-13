@@ -5,7 +5,7 @@ import numpy as np
 import time
 
 # Set run parameters
-RUNTOKEN = 1        # an integer used for labelling the files for this run
+RUNTOKEN = 1        # An integer used for labelling the files for this run
 
 NPROC = 16          # Number of processors to use.
 NT = 16             # Number of temperatures to use.
@@ -34,12 +34,12 @@ ITERSTOSETDT = 25   # The step sizes (or equivalently time steps) are updated af
 ITERSTOWRITESTATE = 1 # The latest potential energy values and coordinates are written out after 
                     # every ITERSTOWRITESTATE iterations.
 
-N_H_LAYERS = 1      # the number of hidden layers.
-NODES_PER_H_LAYER = 40 # the number of nodes in each hidden layer.
+N_H_LAYERS = 1      # The number of hidden layers.
+NODES_PER_H_LAYER = 40 # The number of nodes in each hidden layer.
 IMAGE_SIDEL_USE = 16 # Images will be transformed to have this many pixels along the side.
 DATAPOINTS_PER_CLASS = 50 # Number of stratified samples to draw per class.
-DATAFILE = "data50.txt" # name of file for storing or recovering the indicies of data points.
-N_CLASSES = 10      # the number of nodes in the final (output) layer.
+DATAFILE = "data50.txt" # Name of file for storing or recovering the indicies of data points.
+N_CLASSES = 10      # The number of nodes in the final (output) layer.
 
 def calc_numdim(image_sidel_use,n_h_layers,nodes_per_h_layer,n_classes ):
     """This function calculates the total number of parameters (weights and biases) that will 
@@ -68,19 +68,19 @@ def calc_numdim(image_sidel_use,n_h_layers,nodes_per_h_layer,n_classes ):
 these_masses = 1.0 # all parameters will have the same effective timestep.
 
 # Set limits on parameter values for random (uniform) initialisation.
-# Use standard [-1/\sqrt(fan in) , 1/sqrt(fan in)]
+# Use standard [-1/sqrt(fan in) , 1/sqrt(fan in)]
 intial_absxmax = 1.0/np.sqrt(nn_pe_force.calc_fan_in(IMAGE_SIDEL_USE**2,N_H_LAYERS,NODES_PER_H_LAYER,N_CLASSES))
 nd = calc_numdim(IMAGE_SIDEL_USE, N_H_LAYERS, NODES_PER_H_LAYER, N_CLASSES) # calculate total number of parameters for NN
 
-# initialise object to calculate pe and force values for NN
-# uses data indicies from MNIST specified in DATAFILE to get reproducible cost function.
-# data is stratified if no file is specified.
-# DATAPOINTS_PER_CLASS data points, per class...
+# Initialise object to calculate pe and force values for NN.
+# Uses data indicies from MNIST specified in DATAFILE to get reproducible cost function.
+# Data is stratified if no file is specified.
+# DATAPOINTS_PER_CLASS data points, per class.
 nnpef = nn_pe_force.build_repeatable_NNPeForces(indfl = DATAFILE,image_sidel_use=IMAGE_SIDEL_USE, \
     n_h_layers=N_H_LAYERS, nodes_per_h_layer=NODES_PER_H_LAYER, datapoints_per_class=DATAPOINTS_PER_CLASS)
 
-# initialise random walkers or read restart file.
-# initialise parallel tempering object.
+# Initialise random walkers or read restart file.
+# Initialise parallel tempering object.
 thispt = pt.build_pt(sampling.Hmc, pe_method = nnpef.pe, force_method = nnpef.forces, numdim = nd, \
     masses = these_masses, nT = NT, nproc = NPROC, Tmin = TMIN, Tmax = TMAX, \
     max_iteration = MAXITER, iters_to_swap = ITERSTOSWAP, iters_to_waypoint = ITERSTOWAYPOINT, \
@@ -88,12 +88,12 @@ thispt = pt.build_pt(sampling.Hmc, pe_method = nnpef.pe, force_method = nnpef.fo
     dt = DT_INITIAL, traj_len = TRAJ_LEN, num_traj = NUM_TRAJ, absxmax = ABSXMAXFAC*intial_absxmax, \
     initial_rand_bounds = intial_absxmax, gaussianprior_std = GPRIOR_STD )
 
-# update boundaries on parameters, for softer prior.
+# Update boundaries on parameters, for softer prior.
 for this_traj in thispt.pt_trajs:
     this_traj.sampler.absxmax = ABSXMAXFAC*intial_absxmax
     this_traj.sampler.dt_max = np.median(this_traj.sampler.absxmax)
 
-# run parallel tempering
+# Run parallel tempering
 print 'About to do pt. ',time.ctime()
 thispt.ptmain()
 print 'Done pt. ',time.ctime()
