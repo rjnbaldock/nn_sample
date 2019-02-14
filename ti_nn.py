@@ -16,7 +16,11 @@ COORDS_FILE = "localmin_data50_h3.txt"  # File containing sampling.NewWalker cla
                     # sampling.write_walker . The coordinates should correspond to a local
                     # minimum of the cost function. These coordinates were found by minimising the lowest energy
                     # parameters discovered in a parallel tempering run. The gradient for every individual 
-                    # dimension is smaller that 1.0e-4.
+                    # dimension is smaller that 1.0e-4. This potential energy surface corresponds to a network with
+                    # 3 hidden layers, 256 (=16**2) input neurons, 3 hidden layers each containing 40 logistic neurons
+                    # and 10 logistic output neurons, terminated with a softmax. All hidden and output neurons use a
+                    # bias. The potential is additionally specified by the data which is the stratified sample from 
+                    # MNIST, stored in data50.txt, and comprising 50 data points for each of the 10 digit classes.
 T = 1.0e-4          # Dimensionless temperature T = 1.0/beta
 ABSXMAXFAC = 1.0e5  # The parameters of the NN will be constrained to be with a range 
                     # '[-absxmax,absxmax]' where absxmax = ABSXMAXFAC/sqrt(k_i), with k_i the inward 
