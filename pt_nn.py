@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+"""This script applies parallel tempering (replica exchange (RE) molecular dynamics (MD) with MD replaced by
+Hamiltonian Monte Carlo (HMC)."""
+
 import sampling
 import pt
 import nn_pe_force
