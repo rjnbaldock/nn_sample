@@ -9,7 +9,7 @@ $ pip install pathos
 PyTorch is also required. See https://pytorch.org/get-started/locally/ for installation instructions.
 
 ### To run
-An example calculation can be performed by doing
+An example replica exchange calculation can be performed by doing
 
 ```
 $ export OMP_NUM_THREADS=1
@@ -18,9 +18,19 @@ $ python pt_nn.py
 
 Doing 
 ```
-export OMP_NUM_THREADS=1
+$ export OMP_NUM_THREADS=1
 ```
 is important for good performance when combining pathos multiprocessing and PyTorch.
+
+
+Similarly, an example thermodynamic integration calculation can be run by doing
+```
+$ python ti_nn.py
+```
+If you wish to perform multiple thermodynamic integration calculations in parallel, then it is advisable to first set 
+```
+$ export OMP_NUM_THREADS=1
+```
 
 ### Comment
 
