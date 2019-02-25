@@ -71,7 +71,7 @@ def build_ti(sampler_class, pe_method, force_method, initial_coords, \
 
     if os.path.isfile("./"+restrtfl): # read restart data from restart file
 
-        x0, ti_int_all, halfksquared, n_bridge, sampler, walker, llambda, ntraj_burnin, \
+        x0, ti_int_all, half_k, n_bridge, sampler, walker, llambda, ntraj_burnin, \
             ntraj_sample = read_waypoint(restrtfl, sampler_class, pe_method, force_method)
 
     else:
@@ -91,12 +91,12 @@ def build_ti(sampler_class, pe_method, force_method, initial_coords, \
         llambda = 0.0
 
         print "Start getting inital spring constants and doing burn in",time.ctime()
-        walker, halfksquared = get_halfksqared(walker, sampler, x0, T, 10*ntraj_burnin, 1000)
+        walker, half_k = get_half_k(walker, sampler, x0, T, 10*ntraj_burnin, 1000)
 
-    print halfksquared
+    print half_k
 
     this_ti = ThermodynamicIntegration(restrtfl, sampler, x0, ti_int_all, \
-        halfksquared=halfksquared, Nbridge=n_bridge,ntraj_burnin=ntraj_burnin, \
+        half_k=half_k, Nbridge=n_bridge,ntraj_burnin=ntraj_burnin, \
         ntraj_sample=ntraj_sample, ntimes_set_dt=times_to_setdt, its_to_waypoint=iters_to_waypoint, \
         llambda=llambda)
 
@@ -158,8 +158,8 @@ class ThermodynamicIntegration:
             [llambda, [ data points ]] where data points are values of 
             (quadratic potential - true potential (shifted to zero minimum value)), sampled accroding to the
             Boltzmann distribution for bridging_pe. (Default [], corresponding a new calculation.)
-        halfksquared (single float or numpy array of floats, with length 1 or length numdim): The quadratic 
-            potential is of the form dot_product( (x-x0), (elementwise multiplication of  halfksquared, (x-x0))).
+        half_k (single float or numpy array of floats, with length 1 or length numdim): The quadratic 
+            potential is of the form dot_product( (x-x0), (elementwise multiplication of  half_k, (x-x0))).
         Nbridge (int) : Number of bridging distributions to place between the quadratic and target 
             distributions. (The total number of distributions sampled will be n_bridge + 2.) (Default: 100.)
         ntraj_burnin (int) : The number of trajectories of burn-in run per iteration. 
@@ -185,8 +185,8 @@ class ThermodynamicIntegration:
             (quadratic potential - true potential (shifted to zero minimum value)), sampled accroding to the
             Boltzmann distribution for bridging_pe. (Default: [], corresponding a new calculation.)
         step_start (int) : Initial iteration counter. (Default: len(ti_int_all) at start of calculation.) 
-        halfksquared (single float or numpy array of floats, with length 1 or length numdim): The quadratic 
-            potential is of the form dot_product( (x-x0), (elementwise multiplication of  halfksquared, (x-x0))).
+        half_k (single float or numpy array of floats, with length 1 or length numdim): The quadratic 
+            potential is of the form dot_product( (x-x0), (elementwise multiplication of  half_k, (x-x0))).
         Nbridge (int) : Number of bridging distributions to place between the quadratic and target 
             distributions. (The total number of distributions sampled will be n_bridge + 2.) (Default: 100.)
         ntraj_burnin (int) : The number of trajectories of burn-in run per iteration. 
@@ -206,7 +206,7 @@ class ThermodynamicIntegration:
     """
 
 
-    def __init__(self,restrtfl, sampler_in, x0, ti_int_all = [], halfksquared=1.0, Nbridge=100, \
+    def __init__(self,restrtfl, sampler_in, x0, ti_int_all = [], half_k=1.0, Nbridge=100, \
         ntraj_burnin = 100, ntraj_sample = 100, ntimes_set_dt = 10, \
         its_to_waypoint=10, llambda = 0.0 ):
 
@@ -215,7 +215,7 @@ class ThermodynamicIntegration:
         self.x0 = x0
         self.ti_int_all = ti_int_all
         self.step_start = len(ti_int_all)
-        self.halfksquared = halfksquared
+        self.half_k = half_k
         self.Nbridge = Nbridge
         self.ntraj_burnin = ntraj_burnin
         self.ntraj_sample = ntraj_sample
@@ -241,7 +241,7 @@ class ThermodynamicIntegration:
 
         # Frenkel, Smit, "Understanding Molecular Simulation", (10.2.1)
         pe = self.pe0 + (1.0-self.llambda)*(self.sampler_in.pe_method(x)-self.pe0) + \
-            self.llambda*np.inner((x-self.x0), np.multiply(self.halfksquared, (x-self.x0)))
+            self.llambda*np.inner((x-self.x0), np.multiply(self.half_k, (x-self.x0)))
         return pe
 
     def bridging_force(self,x):
@@ -258,9 +258,9 @@ class ThermodynamicIntegration:
 
         # Negative differential of bridging_pe wrt x
 #        f = self.llambda*self.sampler_in.force_method(x) - \
-#            2.0 * (1.0-self.llambda) * np.multiply( self.halfksquared, (x-self.x0))
+#            2.0 * (1.0-self.llambda) * np.multiply( self.half_k, (x-self.x0))
         f = (1.0-self.llambda)*self.sampler_in.force_method(x) - \
-            2.0 * self.llambda * np.multiply( self.halfksquared, (x-self.x0))
+            2.0 * self.llambda * np.multiply( self.half_k, (x-self.x0))
         return f
 
     def ti_main(self, walker_in):
@@ -274,9 +274,11 @@ class ThermodynamicIntegration:
         walker = sampling.NewWalker(self.sampler_in.absxmax, self.sampler_in.name, \
             pe_method = self.sampler_use.pe_method, x=walker_in.x, p=walker_in.p)
 
-        this_step_setter = sampling.UpdateDt(self.sampler_use)
-        this_step_setter.set([walker], '0. Set dt rough.', adjust_step_factor = 0.1)
-        this_step_setter.set([walker], '0. Set dt accurate.', adjust_step_factor = 0.9)
+        if (len(range(self.step_start,self.Nbridge+2))>0):  # skip this if we are restarting after the 
+                                                            # last sampling iteration 
+            this_step_setter = sampling.UpdateDt(self.sampler_use)
+            this_step_setter.set([walker], '0. Set dt rough.', adjust_step_factor = 0.1)
+            this_step_setter.set([walker], '0. Set dt accurate.', adjust_step_factor = 0.9)
 
         print "Start thermal integration ", time.ctime()
         for step in xrange(self.step_start,self.Nbridge+2):
@@ -300,8 +302,8 @@ class ThermodynamicIntegration:
                 walker, taccept = traj_sample.run(walker)
                 x = walker.x
 #                self.ti_int_all[-1][-1].append( (self.sampler_in.pe_method(x) - self.pe0) - \
-#                    np.inner(x,np.multiply(self.halfksquared,x)) )
-                self.ti_int_all[-1][-1].append( np.inner((x-self.x0),np.multiply(self.halfksquared,(x-self.x0))) - \
+#                    np.inner(x,np.multiply(self.half_k,x)) )
+                self.ti_int_all[-1][-1].append( np.inner((x-self.x0),np.multiply(self.half_k,(x-self.x0))) - \
                     (self.sampler_in.pe_method(x) - self.pe0))
             print step, self.llambda,np.mean(self.ti_int_all[-1][-1]),np.std(self.ti_int_all[-1][-1])
 
@@ -310,7 +312,7 @@ class ThermodynamicIntegration:
 
         Es = [ np.mean(x[-1]) for x in self.ti_int_all ]
         fe, sum_log_sigma = integrate_dF(Es, 1.0/(self.Nbridge+1.0), walker.numdim, \
-            self.sampler_use.beta, self.pe0, self.halfksquared)
+            self.sampler_use.beta, self.pe0, self.half_k)
 
         print "Final Free Energy, sum(log(sigma)): ",fe, sum_log_sigma
 
@@ -325,9 +327,9 @@ class ThermodynamicIntegration:
             if type(ti_params["x0"]) is np.ndarray:
                 ti_params["x0"] = ti_params["x0"].tolist()
             ti_params["ti_int_all"] = self.ti_int_all
-            ti_params["halfksquared"] = self.halfksquared
-            if type(ti_params["halfksquared"]) is np.ndarray:
-                ti_params["halfksquared"] = ti_params["halfksquared"].tolist()
+            ti_params["half_k"] = self.half_k
+            if type(ti_params["half_k"]) is np.ndarray:
+                ti_params["half_k"] = ti_params["half_k"].tolist()
             ti_params["Nbridge"] = self.Nbridge
             ti_params["llambda"] = self.llambda
             ti_params["ntraj_burnin"] = self.ntraj_burnin
@@ -342,9 +344,9 @@ class ThermodynamicIntegration:
             l = "ti_params "+json.dumps(ti_params)+"\n"
             rout.write(l)
 
-            sampler = self.sampler_in
+            sampler = self.sampler_in # read_waypoint will build ThermodynamicIntegration.sampler_in
             int_params = {}
-            int_params["dt"] = sampler.dt
+            int_params["dt"] = self.sampler_use.dt # save most recent dt
             int_params["traj_len"] = sampler.traj_len
             int_params["absxmax"] = sampler.absxmax
             int_params["beta"] = sampler.beta
@@ -381,9 +383,9 @@ def read_waypoint(restrtfl, sampler_class, pe_method,force_method):
             algorithm. Each element ti_int_all has the structure [llambda, [ data points ]] where data
             points are values of (quadratic potential - true potential (shifted to zero minimum value)),
             sampled accroding to the Boltzmann distribution for bridging_pe.
-        halfksquared (single float or numpy array of floats, with length 1 or length numdim): The quadratic 
+        half_k (single float or numpy array of floats, with length 1 or length numdim): The quadratic 
             potential is of the form
-            dot_product( (x-x0), (elementwise multiplication ofhalfksquared, (x-x0))).
+            dot_product( (x-x0), (elementwise multiplication ofhalf_k, (x-x0))).
         Nbridge (int) : Number of bridging distributions to place between the quadratic and target 
             distributions. (The total number of distributions sampled will be n_bridge + 2.)
         sampler : sampling.Sampler class object corresponding to the true potential energy surface. Intended
@@ -403,7 +405,7 @@ def read_waypoint(restrtfl, sampler_class, pe_method,force_method):
 
                 x0 = np.asarray(ti_params["x0"])
                 ti_int_all = ti_params["ti_int_all"] 
-                halfksquared = np.asarray(ti_params["halfksquared"])
+                half_k = np.asarray(ti_params["half_k"])
                 Nbridge = ti_params["Nbridge"]
                 llambda = ti_params["llambda"]
                 ntraj_burnin = ti_params["ntraj_burnin"] 
@@ -424,10 +426,10 @@ def read_waypoint(restrtfl, sampler_class, pe_method,force_method):
                 wd["p"] = np.asarray(wd["p"])
                 walker = sampling.NewWalker(absxmax = None, sampler_name = None, **wd)
 
-    return x0, ti_int_all, halfksquared, Nbridge, sampler, walker, llambda, ntraj_burnin, \
+    return x0, ti_int_all, half_k, Nbridge, sampler, walker, llambda, ntraj_burnin, \
         ntraj_sample
 
-def get_halfksqared(walker, sampler, x0, ntraj_burnin = 100, nsamples = 1000 ):
+def get_half_k(walker, sampler, x0, ntraj_burnin = 100, nsamples = 1000 ):
     """ Following Frenkel, Smit, "Understanding Molecular Simulation" p. 245, this routine aims
     to set the variance of the coordiates under MD on the true potential energy surface, equal 
     with the variance for MD on the springs. This routine takes the following steps
@@ -438,7 +440,7 @@ def get_halfksqared(walker, sampler, x0, ntraj_burnin = 100, nsamples = 1000 ):
     5. Set accurate dt for true potential energy surface.
     6. Collect samples from potential energy surface.
     7. Use the variance of these samples in each dimension to infer the approximate value of
-       halfksquared.
+       half_k.
 
     Args:
         walker : A sampling.NewWalker class object.
@@ -454,7 +456,7 @@ def get_halfksqared(walker, sampler, x0, ntraj_burnin = 100, nsamples = 1000 ):
             walker : sampling.NewWalker class object. For sufficiently large ntraj_burnin, ntraj_sampler, 
                 this should be a well equilibrated sample from the true potential energy surface at 
                 dimensionless temperature T = 1.0/sampler.beta.
-            halfksquared (numpy array of floats with length walker.numdim): 1d array of floats specifying 
+            half_k (numpy array of floats with length walker.numdim): 1d array of floats specifying 
                 the quadratic approximation to the true potential.
      """
 
@@ -477,7 +479,7 @@ def get_halfksqared(walker, sampler, x0, ntraj_burnin = 100, nsamples = 1000 ):
     this_step_setter.set([walker], 'Getting spring constants 2. ', adjust_step_factor = 0.1)
     this_step_setter.set([walker], 'Getting spring constants 3. ', adjust_step_factor = 0.9)
     
-    # 6. Set halfksquared similar to Frenkel, Smit, "Understanding Molecular Simulation".
+    # 6. Set half_k similar to Frenkel, Smit, "Understanding Molecular Simulation".
     #    This approach trys to set <(x-x0)^2> in the Einstein crystal to be equal to
     #    that for the true potential. An estimate of <(x-x0)^2> is therefore required for each 
     #    dimension.
@@ -489,12 +491,12 @@ def get_halfksqared(walker, sampler, x0, ntraj_burnin = 100, nsamples = 1000 ):
         rsq += (walker.x - x0)**2
     rsq /= nsamples
 
-    halfksquared = (1.0/sampler.beta)*0.5/rsq # Adapted from Frenkel, Smit, "Understanding Molecular 
+    half_k = (1.0/sampler.beta)*0.5/rsq # Adapted from Frenkel, Smit, "Understanding Molecular 
         # Simulation" Eq. (10.2.4). There dimensions are grouped into sets of three, here they are not.
 
-    return walker, halfksquared
+    return walker, half_k
 
-def integrate_dF(Es,dlambda,dimens,beta,pe0, halfksquared):
+def integrate_dF(Es,dlambda,dimens,beta,pe0, half_k):
     """Calculate the absolute free energy of the system by numerical integration with Simpson's Rule.
     
     Args:
@@ -504,7 +506,7 @@ def integrate_dF(Es,dlambda,dimens,beta,pe0, halfksquared):
         beta (float) : 1.0/T (T is dimensionless temperature.)
         pe0 (float) : true potential energy function evaluated at x0, which was location of minimum of 
             quadratic approximation to true potential energy function.
-        halfksquared (numpy array of floats): 1d array of floats specifying the quadratic approximation to 
+        half_k (numpy array of floats): 1d array of floats specifying the quadratic approximation to 
             the true potential.
 
     Return:
@@ -517,7 +519,7 @@ def integrate_dF(Es,dlambda,dimens,beta,pe0, halfksquared):
 
     T = 1.0/beta
     dF = - simps(Es,dx=dlambda) # integrate from 0 to 1, but dF is integral from 1 to 0
-    F_Einstein = pe0 - 0.5*T*dimens*np.log(T*np.pi) + 0.5*T*np.sum(np.log(halfksquared))
+    F_Einstein = pe0 - 0.5*T*dimens*np.log(T*np.pi) + 0.5*T*np.sum(np.log(half_k))
     F = F_Einstein + dF
 
     sum_log_keff = dimens*np.log(T*np.pi) + 2.0*(F - pe0)/T
