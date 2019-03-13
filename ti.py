@@ -5,7 +5,6 @@ import sampling
 import numpy as np
 import json
 import time
-import argparse
 import copy
 import os.path
 
