@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """This module calculates the potential energy field over the parameters of a classifier, which is
-a feed forward neural network of logistic neurons terminated with a softmax. It also calculates the
-negative gradient (called the force) for that field. The potential energy is just the cross entropy
-loss, which is the negative logarithm of the probability the classifier correctly assigns the labels
-of every image in the training set. The module also builds or imports a stratified subset of the
-MNIST training set, so that the energy field is reproducable."""
+a feed forward neural network of logistic neurons terminated with linear layer to which I apply a 
+softmax. It also calculates the negative gradient (called the force) for that field. The potential 
+energy is just the cross entropy loss, which is the negative logarithm of the probability the 
+classifier correctly assigns the labels of every image in the training set. The module also builds 
+or imports a stratified subset of the MNIST training set, so that the energy field is reproducable."""
 
 import torch
 import torch.nn as nn
@@ -94,8 +94,11 @@ class LogisticFeedForward(nn.Module):
     def forward(self,x):
         """Forward pass for the network. """
 
-        for layer in self.layers:
+        for i in xrange(len(self.layers)-1):
+            layer = self.layers[i]
             x = torch.sigmoid(layer(x))
+        x = self.layers[-1](x)
+
         return x
 
     def set_h_layer(self, insize, outsize, params):
@@ -324,7 +327,6 @@ def build_data_general(fulltrain_dataset, fulltest_dataset, image_sidel_use, \
             and the indicies of a random stratified data sample are written there.
         append_test (logical) : If True, then the remaining data excluded from the stratified sample,
             is appended to the test set data. Default=True.
-
 
     Return:
         train_images, train_labels, test_images, test_labels
