@@ -7,7 +7,8 @@ Please take a look at report.pdf for some research performed using this reposito
 ### Prerequisites
 
 This project is written in python2.7 and requires installation of the python modules numpy, scipy and pathos. https://pypi.org/project/pathos/ 
-numpy scipy and pathos can be installed by doing
+
+numpy, scipy and pathos can be installed by doing
 ```
 $ pip install -r requirements.txt
 ```
