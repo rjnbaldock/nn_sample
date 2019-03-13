@@ -2,11 +2,12 @@
 
 ### Prerequisites
 
-This project is written in python2.7 and requires installation of the python module pathos. https://pypi.org/project/pathos/
+This project is written in python2.7 and requires installation of the python modules numpy, scipy and pathos. https://pypi.org/project/pathos/ 
+numpy scipy and pathos can be installed by doing
 ```
-$ pip install pathos
+$ pip install -r requirements.txt
 ```
-PyTorch is also required. See https://pytorch.org/get-started/locally/ for installation instructions.
+PyTorch and torchvision are also required. See https://pytorch.org/get-started/locally/ for installation instructions.
 
 ### To run
 An example replica exchange calculation can be performed by doing
@@ -31,6 +32,16 @@ If you wish to perform multiple thermodynamic integration calculations in parall
 ```
 $ export OMP_NUM_THREADS=1
 ```
+
+### Data Sets
+
+To ensure reproducability, data sets used in the calculations shown in report.pdf are included here.
+
+| Data Set      | File Name     |
+|:-------------:|:-------------:|
+| D_50          | data5.txt     |
+| D_500         | data50.txt    |
+| D_5000        | data500.txt   |
 
 ### Comment
 
