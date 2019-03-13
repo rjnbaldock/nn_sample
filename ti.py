@@ -91,7 +91,7 @@ def build_ti(sampler_class, pe_method, force_method, initial_coords, \
         llambda = 0.0
 
         print "Start getting inital spring constants and doing burn in",time.ctime()
-        walker, half_k = get_half_k(walker, sampler, x0, T, 10*ntraj_burnin, 1000)
+        half_k = get_half_k(walker, sampler, x0, 10*ntraj_burnin, 1000)
 
     print half_k
 
@@ -274,11 +274,26 @@ class ThermodynamicIntegration:
         walker = sampling.NewWalker(self.sampler_in.absxmax, self.sampler_in.name, \
             pe_method = self.sampler_use.pe_method, x=walker_in.x, p=walker_in.p)
 
-        if (len(range(self.step_start,self.Nbridge+2))>0):  # skip this if we are restarting after the 
+        if (len(range(self.step_start,self.Nbridge+2))>0):  # skip this if we are restarting after the
                                                             # last sampling iteration 
-            this_step_setter = sampling.UpdateDt(self.sampler_use)
-            this_step_setter.set([walker], '0. Set dt rough.', adjust_step_factor = 0.1)
-            this_step_setter.set([walker], '0. Set dt accurate.', adjust_step_factor = 0.9)
+            if (self.step_start==0): # Do extra burn-in for first iteration. We may well be starting 
+                                     # from x0, as this is set by build_ti.
+                this_step_setter = sampling.UpdateDt(self.sampler_use)
+                this_step_setter.set([walker], '0. Set dt rough.', adjust_step_factor = 0.1)
+                traj_burnin = sampling.Traj(self.sampler_use, 5*self.ntraj_burnin) # do 5x burn-in
+                walker = traj_burnin.run_serial(walker)
+                this_step_setter.set([walker], '0. Done 5x burn-in. Set dt rough.', \
+                    adjust_step_factor = 0.1)
+                traj_burnin = sampling.Traj(self.sampler_use, 10*self.ntraj_burnin) # do 10x burn-in
+                walker = traj_burnin.run_serial(walker)
+                this_step_setter.set([walker], '0. Done further 10x burn-in. Set dt rough.', \
+                    adjust_step_factor = 0.1)
+                this_step_setter.set([walker], '0. Set dt accurate.', adjust_step_factor = 0.9)
+            else: # check step size
+                this_step_setter = sampling.UpdateDt(self.sampler_use)
+                this_step_setter.set([walker], '0. Set dt rough.', adjust_step_factor = 0.1)
+                this_step_setter.set([walker], '0. Set dt accurate.', adjust_step_factor = 0.9)
+
 
         print "Start thermal integration ", time.ctime()
         for step in xrange(self.step_start,self.Nbridge+2):
@@ -311,10 +326,10 @@ class ThermodynamicIntegration:
             self.write_waypoint(walker, step)
 
         Es = [ np.mean(x[-1]) for x in self.ti_int_all ]
-        fe, sum_log_sigma = integrate_dF(Es, 1.0/(self.Nbridge+1.0), walker.numdim, \
-            self.sampler_use.beta, self.pe0, self.half_k)
+        fe = integrate_dF(Es, 1.0/(self.Nbridge+1.0), walker.numdim, \
+            self.sampler_use.beta, self.pe0, self.half_k, self.sampler_use.absxmax)
 
-        print "Final Free Energy, sum(log(sigma)): ",fe, sum_log_sigma
+        print "Final Free Energy: ",fe
 
     def write_waypoint(self,walker,step):
         """Writes the waypoint file to self.restrtfl"""
@@ -453,50 +468,59 @@ def get_half_k(walker, sampler, x0, ntraj_burnin = 100, nsamples = 1000 ):
             end of each trajectory. (Default 1000).
 
         Return:
-            walker : sampling.NewWalker class object. For sufficiently large ntraj_burnin, ntraj_sampler, 
-                this should be a well equilibrated sample from the true potential energy surface at 
-                dimensionless temperature T = 1.0/sampler.beta.
             half_k (numpy array of floats with length walker.numdim): 1d array of floats specifying 
                 the quadratic approximation to the true potential.
      """
 
+    import sys
+
+    walker_use = sampling.NewWalker(None,None,None, x = walker.x, p = walker.p, pe = walker.pe, \
+        ke = walker.ke)
+
+    # Turn off absxmax for fitting quadratic. This is reset at the end.
+    save_absxmax = copy.deepcopy(sampler.absxmax)
+    sampler.absxmax = sys.float_info.max
+    
     # 1. Set initial dt
     this_step_setter = sampling.UpdateDt(sampler)
-    this_step_setter.set([walker], 'Getting spring constants 0. ', adjust_step_factor = 0.1)
+    this_step_setter.set([walker_use], 'Getting spring constants 0. ', adjust_step_factor = 0.1)
 
     # 2. Do 20% of burn in
     traj_burnin = sampling.Traj(sampler, int(np.ceil(ntraj_burnin*0.2)))
-    walker = traj_burnin.run_serial(walker)
+    walker_use = traj_burnin.run_serial(walker_use)
 
     # 3. Improve dt
-    this_step_setter.set([walker], 'Getting spring constants 1. ', adjust_step_factor = 0.1)
+    this_step_setter.set([walker_use], 'Getting spring constants 1. ', adjust_step_factor = 0.1)
 
     # 4. Do 80% of burn in
     traj_burnin = sampling.Traj(sampler, int(np.ceil(ntraj_burnin*0.8)))
-    walker = traj_burnin.run_serial(walker)
+    walker_use = traj_burnin.run_serial(walker_use)
 
     # 5. Set final dt
-    this_step_setter.set([walker], 'Getting spring constants 2. ', adjust_step_factor = 0.1)
-    this_step_setter.set([walker], 'Getting spring constants 3. ', adjust_step_factor = 0.9)
+    this_step_setter.set([walker_use], 'Getting spring constants 2. ', adjust_step_factor = 0.1)
+    this_step_setter.set([walker_use], 'Getting spring constants 3. ', adjust_step_factor = 0.9)
     
     # 6. Set half_k similar to Frenkel, Smit, "Understanding Molecular Simulation".
     #    This approach trys to set <(x-x0)^2> in the Einstein crystal to be equal to
     #    that for the true potential. An estimate of <(x-x0)^2> is therefore required for each 
     #    dimension.
-    rsq = np.zeros(len(walker.x)) # This will hold <(x-x0)^2> for each dimension
+    rsq = np.zeros(len(walker_use.x)) # This will hold <(x-x0)^2> for each dimension
     traj_sample = sampling.Traj(sampler, 1) # A sample will be drawn after each of nsamples 
                                             # trajectories
     for t in xrange(nsamples):
-        walker, taccept = traj_sample.run(walker)
-        rsq += (walker.x - x0)**2
+        walker_use, taccept = traj_sample.run(walker_use)
+        rsq += (walker_use.x - x0)**2
     rsq /= nsamples
 
     half_k = (1.0/sampler.beta)*0.5/rsq # Adapted from Frenkel, Smit, "Understanding Molecular 
         # Simulation" Eq. (10.2.4). There dimensions are grouped into sets of three, here they are not.
 
-    return walker, half_k
+    # reset absxmax to saved value
+    sampler.absxmax = save_absxmax
 
-def integrate_dF(Es,dlambda,dimens,beta,pe0, half_k):
+    return half_k
+
+def integrate_dF(Es,dlambda,dimens,beta,pe0, half_k, absxmax=None):
     """Calculate the absolute free energy of the system by numerical integration with Simpson's Rule.
     
     Args:
@@ -504,25 +528,35 @@ def integrate_dF(Es,dlambda,dimens,beta,pe0, half_k):
             for each value of llamda.
         dlambda (float) : llambda step size.
         beta (float) : 1.0/T (T is dimensionless temperature.)
-        pe0 (float) : true potential energy function evaluated at x0, which was location of minimum of 
+        pe0 (float) : true potential energy function evaluated at x0, which was location of minimum of
             quadratic approximation to true potential energy function.
         half_k (numpy array of floats): 1d array of floats specifying the quadratic approximation to 
             the true potential.
+        absxmax (None or float or numpy array of floats with length equal to that of half_k): If 
+            absxmax is not None, then the integral for the quadratic potential is constrained to the
+            region -absxmax_i < x_i < +absxmax_i for all i. (If absxmax is a float, then absxmax_i is 
+            equal to the value of that float for all i.)
 
     Return:
         F (float) : Free energy of crystal.
-        sum_log_sigma (float) : Estimate of the log of the determinant of the hessian at the local minimum 
-            of the potential energy.
     """
 
     from scipy.integrate import simps
+    from scipy.special import erf
 
     T = 1.0/beta
     dF = - simps(Es,dx=dlambda) # integrate from 0 to 1, but dF is integral from 1 to 0
     F_Einstein = pe0 - 0.5*T*dimens*np.log(T*np.pi) + 0.5*T*np.sum(np.log(half_k))
+    if (absxmax is not None):
+        # account for absxmax bounds on integration
+        # See Gradshteyn, Ryzhik. "Table of Integrals, Series and Products", 7th Ed. Eq. 3.321.2
+        q = np.sqrt(half_k/T)
+        F_Einstein += -T * np.sum( np.log(erf(np.multiply(absxmax,q))) ) 
+        # This last line works if absxmax is a float or a numpy array of the same length as half_k
+
     F = F_Einstein + dF
 
-    sum_log_keff = dimens*np.log(T*np.pi) + 2.0*(F - pe0)/T
-    sum_log_sigma = -0.5*(sum_log_keff + dimens*np.log(2.0))
+#    sum_log_keff = dimens*np.log(T*np.pi) + 2.0*(F - pe0)/T
+#    sum_log_sigma = -0.5*(sum_log_keff + dimens*np.log(2.0))
 
-    return F_Einstein + dF, sum_log_sigma
+    return F_Einstein + dF #, sum_log_sigma
