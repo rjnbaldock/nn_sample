@@ -10,7 +10,7 @@ from scipy.optimize import minimize
 import os.path
 import time
 
-def build_pt(sampler_class, pe_method, force_method, numdim = 5, masses = np.ones(5), \
+def build_pt(sampler_class, pe_method, force_method, numdim = 5, masses = 1.0, \
     nT = 10, nproc = 1, Tmin = 1.0, Tmax = 100.0, max_iteration = 500, iters_to_swap = 1, \
     iters_to_waypoint = 5, iters_to_setdt = 10, iters_to_writestate = 1, run_token = 1, \
     dt = 1.0e-4, traj_len = 100, num_traj = 10, absxmax = 1.0e2, initial_rand_bounds = 1.0e2, \
@@ -26,7 +26,7 @@ def build_pt(sampler_class, pe_method, force_method, numdim = 5, masses = np.one
             (Defualt: 5)
         masses (single float or numpy array of floats, with length 1 or length numdim): specifies the
             masses associated with each dimension of the configuration space ('parameter space'). 
-            (Default: np.ones(5))
+            (Default: 1.0)
         nT (int) : Number of temperatures to use. (Default: 10)
         nproc (int) : Number of processors to use. (Default: 1)
         Tmin (float) : Lowest temperature in ladder of temperatures. (Default 1.0)
@@ -462,7 +462,7 @@ def ith_temperature(Tmin,Tmax,nT,i, series_type = "geometric"):
     return T
 
 def read_waypoint(restrtfl, sampler_class, pe_method, force_method):
-    """Reads a waypoint
+    """Reads a waypoint from restrtfl
     
     Args:
         restrtfl (str) : file from which to read waypoint
@@ -509,6 +509,7 @@ def read_waypoint(restrtfl, sampler_class, pe_method, force_method):
                 wd["x"] = np.asarray(wd["x"])
                 wd["p"] = np.asarray(wd["p"])
                 walker = sampling.NewWalker(absxmax = None, sampler_name = None, **wd)
+                walker.pe = pe_method(walker.x)
                 walkers = np.append(walkers, walker)
 
     return nT, Tmin, Tmax, iteration, num_traj, samplers, walkers
@@ -565,6 +566,9 @@ def rough_minimise(walker, sampler, nsteps = 1000):
         walker : sampling.NewWalker object
         sampler : sampling.Sampler object
         nsteps (int) : total number of timesteps to take (Default: 1000).
+
+    Return:
+        walker : sampling.NewWalker object after minimisation.
     """
 
     save_dt = sampler.dt
