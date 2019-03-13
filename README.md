@@ -1,5 +1,9 @@
 # nn_sample
 
+### Research
+
+Please take a look at report.pdf for some research performed using this repository.
+
 ### Prerequisites
 
 This project is written in python2.7 and requires installation of the python modules numpy, scipy and pathos. https://pypi.org/project/pathos/ 
@@ -45,6 +49,4 @@ To ensure reproducability, data sets used in the calculations shown in report.pd
 
 ### Comment
 
-Please take a look at report.pdf for some research performed using this repository.
-
-In the code I have referred "Parallel Tempering". This is the name for Replica Exchange Molecular Dynamics when you replace the Molecular Dynamics (MD) with Markov chain Monte Carlo (MCMC). My code is completely agnostic to the Monte Carlo approach used. I've implemented Hamiltonian Monte Carlo (HMC), which is intermediate to MD and MCMC. I chose to use the name Parallel Tempering when writing the code. You'll be able to read about my implementation in the report very soon.
+In the code I have referred "Parallel Tempering". This is the name for Replica Exchange Molecular Dynamics when you replace the Molecular Dynamics (MD) with Markov chain Monte Carlo (MCMC). My code is completely agnostic to the Monte Carlo approach used. I've implemented Hamiltonian Monte Carlo (HMC), which is intermediate to MD and MCMC. I chose to use the name Parallel Tempering when writing the code.
