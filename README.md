@@ -2,7 +2,7 @@
 
 ### Research
 
-Please take a look at report.pdf for some research performed using this repository.
+Please take a look at https://arxiv.org/abs/1904.04154 for some research performed using this repository. The same document is also availble here as report.pdf.
 
 ### Prerequisites
 
