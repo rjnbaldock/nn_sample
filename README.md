@@ -65,22 +65,22 @@ Default parameters are given in the following table.
 
 | Parameter | Default value | Meaning |
 |:-------------:|:-------------:|:-------------:|
-| runtoken | 1        | An integer used for labelling the files for this run |
-| coords_file | "localmin_data50_h3_flin.txt"  | File containing sampling.NewWalker class object saved as dict using sampling.write_walker . The coordinates should correspond to a local minimum of the cost function. These coordinates were found by minimising the lowest energy parameters discovered in a parallel tempering run. The gradient for every individual dimension is smaller that 1.0e-4. This potential energy surface corresponds to a network with 3 hidden layers, 256 (=16**2) input neurons, 3 hidden layers each containing 40 logistic neurons and 10 linear output neurons, terminated with a softmax. All hidden and output neurons use a bias. The potential is additionally specified by the data which is the stratified sample from MNIST, stored in data50.txt, and comprising 50 data points for each of the 10 digit classes |
+| runtoken | 1        | An integer used for labelling the files for this run. |
+| coords_file | "localmin_data50_h3_flin.txt"  | File containing sampling.NewWalker class object saved as dict using sampling.write_walker . The coordinates should correspond to a local minimum of the cost function. These coordinates were found by minimising the lowest energy parameters discovered in a parallel tempering run. The gradient for every individual dimension is smaller that 1.0e-4. This potential energy surface corresponds to a network with 3 hidden layers, 256 (=16**2) input neurons, 3 hidden layers each containing 40 logistic neurons and 10 linear output neurons, terminated with a softmax. All hidden and output neurons use a bias. The potential is additionally specified by the data which is the stratified sample from MNIST, stored in data50.txt, and comprising 50 data points for each of the 10 digit classes. |
 | T | 1.0e-4          | Dimensionless temperature T = 1.0/beta |
-| absxmaxfac | 1.0e5  | The parameters of the NN will be constrained to be with a range '[-absxmax,absxmax]' where absxmax = absxmaxfac/sqrt(k_i), with k_i the inward degree of the neuron to which parameter i transmits values |
-| gprior_std | None   | If this is set to a real value then an additional term is applied to (H)MC acceptance/rejection such that the target distribution is proportional to a multivariate Gaussian with this standard deviation for each dimension |
-| dt_initial | 1.0e-1 | Initial time step (or step size). This will be updated algorithmically, but a good starting point saves time |
-| ntraj_burnin | 100  | The number of burn in trajectories to run for each bridging distribution |
-| ntraj_sample | 100  | The number of sampling trajectories to run for each bridging distribution |
-| traj_len | 100      | The number of time steps to use for each trajectory |
-| nbridge | 100       | Number of bridging distributions to use. Including sampling the distribution corresponding to the true potential, and the quadratic approximation potential, nbridge+2 distributions are sampled |
-| ntimes_set_dt | 10  | dt is updated after sampling every nbridge/ntimes_set_dt distributions |
-| iterstowaypoint | 10 | Restart information is written after sampling every iterstowaypoint distributions |
-| n_h_layers | 3      | The number of hidden layers |
-| nodes_per_h_layer | 40 | The number of nodes in each hidden layer |
-| image_sidel_use | 16 | Images will be transformed to have this many pixels along the side |
-| datapoints_per_class | 50 | Number of stratified samples to draw per class |
+| absxmaxfac | 1.0e5  | The parameters of the NN will be constrained to be with a range '[-absxmax,absxmax]' where absxmax = absxmaxfac/sqrt(k_i), with k_i the inward degree of the neuron to which parameter i transmits values. |
+| gprior_std | None   | If this is set to a real value then an additional term is applied to (H)MC acceptance/rejection such that the target distribution is proportional to a multivariate Gaussian with this standard deviation for each dimension. |
+| dt_initial | 1.0e-1 | Initial time step (or step size). This will be updated algorithmically, but a good starting point saves time. |
+| ntraj_burnin | 100  | The number of burn in trajectories to run for each bridging distribution. |
+| ntraj_sample | 100  | The number of sampling trajectories to run for each bridging distribution. |
+| traj_len | 100      | The number of time steps to use for each trajectory. |
+| nbridge | 100       | Number of bridging distributions to use. Including sampling the distribution corresponding to the true potential, and the quadratic approximation potential, nbridge+2 distributions are sampled. |
+| ntimes_set_dt | 10  | dt is updated after sampling every nbridge/ntimes_set_dt distributions. |
+| iterstowaypoint | 10 | Restart information is written after sampling every iterstowaypoint distributions. |
+| n_h_layers | 3      | The number of hidden layers. |
+| nodes_per_h_layer | 40 | The number of nodes in each hidden layer. |
+| image_sidel_use | 16 | Images will be transformed to have this many pixels along the side. |
+| datapoints_per_class | 50 | Number of stratified samples to draw per class. |
 
 
 If you wish to perform multiple thermodynamic integration calculations in parallel, then it is advisable to first set 
