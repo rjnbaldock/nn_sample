@@ -16,33 +16,33 @@ def read_runparameters():
     
     Default runtime parameters:
 
-        "runtoken" : 1           # An integer used for labelling the files for this run
-        "nproc" : 16             # Number of processors to use.
-        "nT" : 16                # Number of temperatures to use.
-        "Tmin" : 1.0e-2          # Lowest temperature in ladder of temperatures.
-        "Tmax" : (1.0e0)         # Maximum temperature in ladder of temperatures. 
-        "absxmaxfac" : 1.0e 3    # The parameters of the NN will be constrained to be with a range 
+        "runtoken" : 1           # (int) An integer used for labelling the files for this run
+        "nproc" : 16             # (int) Number of processors to use.
+        "nT" : 16                # (int) Number of temperatures to use.
+        "Tmin" : 1.0e-2          # (float) Lowest temperature in ladder of temperatures.
+        "Tmax" : 1.0e0           # (float) Maximum temperature in ladder of temperatures. 
+        "absxmaxfac" : 5.0e1     # (float) The parameters of the NN will be constrained to be with a range 
                                  # "[-absxmaxabsxmax]" where absxmax = absxmaxfac/sqrt(k_i), with k_i the 
                                  # inward degree of the neuron to which parameter i transmits values.
-        "gprior_std" : None      # If this is set to a real value then an additional term is applied to (H)MC
+        "gprior_std" : None      # (None or float) If this is set to a real value then an additional term is applied to (H)MC
                                  # acceptance/rejection such that the target distribution is proportional to
                                  # multivariate Gaussian with this standard deviation for each dimension. 
-        "dt_initial" : 1.0e-1    # Initial time step (or step size). This will be updated algorithmically, 
+        "dt_initial" : 1.0e-1    # (float) Initial time step (or step size). This will be updated algorithmically, 
                                  # but a good starting point saves time.
-        "num_traj" : 10          # The number of trajectories run per iteration.
-        "traj_len" : 100         # The number of time steps in a single trajectory.
-        "maxiter" : 10000       # Max number of iterations to run.
-        "iterstoswap" : 1        # Configuration swaps between neighbouring temperatures are attempted every 
+        "num_traj" : 10          # (int) The number of trajectories run per iteration.
+        "traj_len" : 100         # (int) The number of time steps in a single trajectory.
+        "maxiter" : 10000        # (int) Max number of iterations to run.
+        "iterstoswap" : 1        # (int) Configuration swaps between neighbouring temperatures are attempted every 
                                  # iterstoswap iterations.
-        "iterstowaypoint" : 1    # Restart information is written after every iterstowaypoint iterations.
-        "iterstosetdt" : 25      # The step sizes (or equivalently time steps) are updated after every 
+        "iterstowaypoint" : 1    # (int) Restart information is written after every iterstowaypoint iterations.
+        "iterstosetdt" : 25      # (int) The step sizes (or equivalently time steps) are updated after every 
                                  # iterstosetdt interations.
-        "iterstowritestate" : 1  # The latest potential energy values and coordinates are written out after 
+        "iterstowritestate" : 1  # (int) The latest potential energy values and coordinates are written out after 
                                  # every iterstowritestate iterations.
-        "n_h_layers" : 1         # The number of hidden layers.
-        "nodes_per_h_layer" : 40 # The number of nodes in each hidden layer.
-        "image_sidel_use" : 16   # Images will be transformed to have this many pixels along the side.
-        "datapoints_per_class" : 50 # Number of stratified samples to draw per class.
+        "n_h_layers" : 3         # (int) The number of hidden layers.
+        "nodes_per_h_layer" : 40 # (int) The number of nodes in each hidden layer.
+        "image_sidel_use" : 16   # (int) Images will be transformed to have this many pixels along the side.
+        "datapoints_per_class" : 50 # (int) Number of stratified samples to draw per class.
 
     Return:
         run_parameters_out : dictionary of runtime parameters
@@ -55,8 +55,8 @@ def read_runparameters():
     "nproc" : 16,
     "nT" : 16,
     "Tmin" : 1.0e-2,
-    "Tmax" : (1.0e0),
-    "absxmaxfac" : 1.0e3,
+    "Tmax" : 1.0e0,
+    "absxmaxfac" : 5.0e1,
     "gprior_std" : None,
     "dt_initial" : 1.0e-1,
     "num_traj" : 10,
@@ -66,7 +66,7 @@ def read_runparameters():
     "iterstowaypoint" : 1,
     "iterstosetdt" : 25,
     "iterstowritestate" : 1,
-    "n_h_layers" : 1,
+    "n_h_layers" : 3,
     "nodes_per_h_layer" : 40,
     "image_sidel_use" : 16,
     "datapoints_per_class" : 50,

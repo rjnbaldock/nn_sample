@@ -18,8 +18,8 @@ def read_runparameters():
     
     Default runtime parameters:
 
-        runtoken : 1        # An integer used for labelling the files for this run
-        coords_file : "localmin_data50_h3_flin.txt"  # File containing sampling.NewWalker class object saved as 
+        runtoken : 1        # (int) An integer used for labelling the files for this run
+        coords_file : "localmin_data50_h3_flin.txt"  # (str) File containing sampling.NewWalker class object saved as 
                             # dict using sampling.write_walker . The coordinates should correspond to a local
                             # minimum of the cost function. These coordinates were found by minimising the 
                             # lowest energy parameters discovered in a parallel tempering run. The gradient 
@@ -30,30 +30,30 @@ def read_runparameters():
                             # bias. The potential is additionally specified by the data which is the 
                             # stratified sample from MNIST, stored in data50.txt, and comprising 50 data 
                             # points for each of the 10 digit classes.
-        T : 1.0e-4          # Dimensionless temperature T = 1.0/beta
-        absxmaxfac : 1.0e5  # The parameters of the NN will be constrained to be with a range 
+        T : 1.0e-4          # (float) Dimensionless temperature T = 1.0/beta
+        absxmaxfac : 5.0e1  # (float) The parameters of the NN will be constrained to be with a range 
                             # '[-absxmax,absxmax]' where absxmax = absxmaxfac/sqrt(k_i), with k_i the inward 
                             # degree of the neuron to which parameter i transmits values.
-        gprior_std : None   # If this is set to a real value then an additional term is applied to (H)MC 
+        gprior_std : None   # (None or float) If this is set to a real value then an additional term is applied to (H)MC 
                             # acceptance/rejection such that the target distribution is proportional to a 
                             # multivariate Gaussian with this standard deviation for each dimension. 
-        dt_initial : 1.0e-1 # Initial time step (or step size). This will be updated algorithmically, but a 
+        dt_initial : 1.0e-1 # (float) Initial time step (or step size). This will be updated algorithmically, but a 
                             # good starting point saves time.
 
-        ntraj_burnin : 100  # The number of burn in trajectories to run for each bridging distribution
-        ntraj_sample : 100  # The number of sampling trajectories to run for each bridging distribution 
-        traj_len : 100      # The number of time steps to use for each trajectory
+        ntraj_burnin : 100  # (int) The number of burn in trajectories to run for each bridging distribution
+        ntraj_sample : 100  # (int) The number of sampling trajectories to run for each bridging distribution 
+        traj_len : 100      # (int) The number of time steps to use for each trajectory
 
-        nbridge : 100       # Number of bridging distributions to use. Including sampling the distribution 
+        nbridge : 100       # (int) Number of bridging distributions to use. Including sampling the distribution 
                             # corresponding to the true potential, and the quadratic approximation 
                             # potential, the nbridge+2 distributions are sampled.
-        ntimes_set_dt : 10  # dt is updated after sampling every nbridge/ntimes_set_dt distributions.
-        iterstowaypoint : 10 # Restart information is written after sampling every iterstowaypoint distributions.
+        ntimes_set_dt : 10  # (int) dt is updated after sampling every nbridge/ntimes_set_dt distributions.
+        iterstowaypoint : 10 # (int) Restart information is written after sampling every iterstowaypoint distributions.
 
-        n_h_layers : 3      # The number of hidden layers.
-        nodes_per_h_layer : 40 # The number of nodes in each hidden layer.
-        image_sidel_use : 16 # Images will be transformed to have this many pixels along the side.
-        datapoints_per_class : 50 # Number of stratified samples to draw per class.
+        n_h_layers : 3      # (int) The number of hidden layers.
+        nodes_per_h_layer : 40 # (int) The number of nodes in each hidden layer.
+        image_sidel_use : 16 # (int) Images will be transformed to have this many pixels along the side.
+        datapoints_per_class : 50 # (int) Number of stratified samples to draw per class.
 
     Return:
         run_parameters_out : dictionary of runtime parameters
