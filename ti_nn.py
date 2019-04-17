@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """This script calculates the free energy of a neural network, assuming the posterior of the network is localised
-around a particular local minimum, specified in the file COORDS_FILE. The effective value of the log of the 
+around a particular local minimum, specified in the file run_params["coords_file"]. The effective value of the log of the 
 determinant of the Hessian at that minimum is also reported."""
 
 import sampling
@@ -10,43 +10,101 @@ import numpy as np
 import time
 import json
 
-# Set run parameters
-RUNTOKEN = 1        # An integer used for labelling the files for this run
-COORDS_FILE = "localmin_data50_h3.txt"  # File containing sampling.NewWalker class object saved as dict using 
-                    # sampling.write_walker . The coordinates should correspond to a local
-                    # minimum of the cost function. These coordinates were found by minimising the lowest energy
-                    # parameters discovered in a parallel tempering run. The gradient for every individual 
-                    # dimension is smaller that 1.0e-4. This potential energy surface corresponds to a network with
-                    # 3 hidden layers, 256 (=16**2) input neurons, 3 hidden layers each containing 40 logistic neurons
-                    # and 10 logistic output neurons, terminated with a softmax. All hidden and output neurons use a
-                    # bias. The potential is additionally specified by the data which is the stratified sample from 
-                    # MNIST, stored in data50.txt, and comprising 50 data points for each of the 10 digit classes.
-T = 1.0e-4          # Dimensionless temperature T = 1.0/beta
-ABSXMAXFAC = 1.0e5  # The parameters of the NN will be constrained to be with a range 
-                    # '[-absxmax,absxmax]' where absxmax = ABSXMAXFAC/sqrt(k_i), with k_i the inward 
-                    # degree of the neuron to which parameter i transmits values.
-GPRIOR_STD = None   # If this is set to a real value then an additional term is applied to (H)MC 
-                    # acceptance/rejection such that the target distribution is proportional to a 
-                    # multivariate Gaussian with this standard deviation for each dimension. 
-DT_INITIAL = 1.0e-1 # Initial time step (or step size). This will be updated algorithmically, but a 
-                    # good starting point saves time.
+def read_runparameters():
+    """ This routine reads a json object from the file ti_nn.config into a dictionary of parameters for
+    the calculation. After loading the json object, ti_nn.config is overwritten with the dictionary of
+    parameters used in the calculation. If ti_nn.config does not exist then default parameters are used.
+    These default parameters are also used to fill missing keys from the input dictionary.
+    
+    Default runtime parameters:
 
-NTRAJ_BURNIN = 100  # The number of burn in trajectories to run for each bridging distribution
-NTRAJ_SAMPLE = 100  # The number of sampling trajectories to run for each bridging distribution 
-TRAJ_LEN = 100      # The number of time steps to use for each trajectory
+        runtoken : 1        # An integer used for labelling the files for this run
+        coords_file : "localmin_data50_h3_flin.txt"  # File containing sampling.NewWalker class object saved as 
+                            # dict using sampling.write_walker . The coordinates should correspond to a local
+                            # minimum of the cost function. These coordinates were found by minimising the 
+                            # lowest energy parameters discovered in a parallel tempering run. The gradient 
+                            # for every individual dimension is smaller that 1.0e-4. This potential energy 
+                            # surface corresponds to a network with 3 hidden layers, 256 (=16**2) input 
+                            # neurons, 3 hidden layers each containing 40 logistic neurons and 10 linear
+                            # output neurons, terminated with a softmax. All hidden and output neurons use a
+                            # bias. The potential is additionally specified by the data which is the 
+                            # stratified sample from MNIST, stored in data50.txt, and comprising 50 data 
+                            # points for each of the 10 digit classes.
+        T : 1.0e-4          # Dimensionless temperature T = 1.0/beta
+        absxmaxfac : 1.0e5  # The parameters of the NN will be constrained to be with a range 
+                            # '[-absxmax,absxmax]' where absxmax = absxmaxfac/sqrt(k_i), with k_i the inward 
+                            # degree of the neuron to which parameter i transmits values.
+        gprior_std : None   # If this is set to a real value then an additional term is applied to (H)MC 
+                            # acceptance/rejection such that the target distribution is proportional to a 
+                            # multivariate Gaussian with this standard deviation for each dimension. 
+        dt_initial : 1.0e-1 # Initial time step (or step size). This will be updated algorithmically, but a 
+                            # good starting point saves time.
 
-NBRIDGE = 100       # Number of bridging distributions to use. Including sampling the distribution corresponding 
-                    # to the true potential, and the quadratic approximation potential, the NBRIDGE+2 
-                    # distributions are sampled.
-NTIMES_SET_DT = 10  # dt is updated after sampling every NBRIDGE/NTIMES_SET_DT distributions.
-ITERSTOWAYPOINT = 10 # Restart information is written after sampling every ITERSTOWAYPOINT distributions.
+        ntraj_burnin : 100  # The number of burn in trajectories to run for each bridging distribution
+        ntraj_sample : 100  # The number of sampling trajectories to run for each bridging distribution 
+        traj_len : 100      # The number of time steps to use for each trajectory
 
-N_H_LAYERS = 3      # The number of hidden layers.
-NODES_PER_H_LAYER = 40 # The number of nodes in each hidden layer.
-IMAGE_SIDEL_USE = 16 # Images will be transformed to have this many pixels along the side.
-DATAPOINTS_PER_CLASS = 50 # Number of stratified samples to draw per class.
-DATAFILE = "data50.txt" # Name of file for storing or recovering the indicies of data points.
-N_CLASSES = 10      # The number of nodes in the final (output) layer.
+        nbridge : 100       # Number of bridging distributions to use. Including sampling the distribution 
+                            # corresponding to the true potential, and the quadratic approximation 
+                            # potential, the nbridge+2 distributions are sampled.
+        ntimes_set_dt : 10  # dt is updated after sampling every nbridge/ntimes_set_dt distributions.
+        iterstowaypoint : 10 # Restart information is written after sampling every iterstowaypoint distributions.
+
+        n_h_layers : 3      # The number of hidden layers.
+        nodes_per_h_layer : 40 # The number of nodes in each hidden layer.
+        image_sidel_use : 16 # Images will be transformed to have this many pixels along the side.
+        datapoints_per_class : 50 # Number of stratified samples to draw per class.
+
+    Return:
+        run_parameters_out : dictionary of runtime parameters
+    """
+
+    import json
+
+    # Set run parameters
+    default_run_parameters = {
+        "runtoken" : 1,
+        "coords_file" : "localmin_data50_h3_flin.txt",
+        "T" : 1.0e-4,
+        "absxmaxfac" : 1.0e5,
+        "gprior_std" : None,
+        "dt_initial" : 1.0e-1,
+        "ntraj_burnin" : 100,
+        "ntraj_sample" : 100,
+        "traj_len" : 100,
+        "nbridge" : 100,
+        "ntimes_set_dt" : 10,
+        "iterstowaypoint" : 10,
+        "n_h_layers" : 3,
+        "nodes_per_h_layer" : 40,
+        "image_sidel_use" : 16,
+        "datapoints_per_class" : 50
+        }
+
+    run_parameters_out = {}
+    try: # if ti_nn.config doesn't exist, use the default parameters
+        with open('ti_nn.config', 'r') as f:
+            rp = json.load(f)
+            for key in rp.keys(): # Load only those keys already specified in default_run_parameters
+                if key in default_run_parameters.keys():
+                    run_parameters_out[key] = rp[key]
+            for key in default_run_parameters.keys():
+                if key not in run_parameters_out.keys():
+                    run_parameters_out[key] = default_run_parameters[key]
+            print "Read runtime parameters from ti_nn.config"
+    except:
+        run_parameters_out = default_run_parameters
+        print "Using default runtime parameters"
+
+    with open('ti_nn.config','w') as f:
+        f.write(json.dumps(run_parameters_out))
+        print "Written runtime parameters to ti_nn.config"
+
+    # specify file for indices to read or write the indices of stratified data samples
+    run_parameters_out["datafile"] = "data"+str(run_parameters_out["datapoints_per_class"])+".txt"
+
+    return run_parameters_out
+
 
 def calc_numdim(image_sidel_use,n_h_layers,nodes_per_h_layer,n_classes ):
     """This function calculates the total number of parameters (weights and biases) that will 
@@ -90,29 +148,37 @@ def read_coords(cfile):
         walker = sampling.NewWalker(absxmax = None, sampler_name = None, **wd)
     return walker
 
+run_params = read_runparameters() # get run parameters from file
+
 these_masses = 1.0 # all parameters will have the same effective timestep.
 
 # Parameter values are subject to a (uniform) prior, restricting them to a region
-# [-ABSXMAXFAC/sqrt(fan in) , +ABSXMAXFAC/sqrt(fan in)]
-absxmax = ABSXMAXFAC/np.sqrt(nn_pe_force.calc_fan_in(IMAGE_SIDEL_USE**2,N_H_LAYERS,NODES_PER_H_LAYER,N_CLASSES))
-nd = calc_numdim(IMAGE_SIDEL_USE, N_H_LAYERS, NODES_PER_H_LAYER, N_CLASSES) # calculate total number of parameters for NN
+# [-run_params["absxmaxfac"]/sqrt(fan in) , +run_params["absxmaxfac"]/sqrt(fan in)]
+absxmax = run_params["absxmaxfac"]/np.sqrt(nn_pe_force.calc_fan_in(run_params["image_sidel_use"]**2, \
+    run_params["n_h_layers"],run_params["nodes_per_h_layer"],10))
+nd = calc_numdim(run_params["image_sidel_use"], run_params["n_h_layers"], run_params["nodes_per_h_layer"], \
+    10) # calculate total number of parameters for NN
 
 # Initialise object to calculate pe and force values for NN.
-# Uses data indicies from MNIST specified in DATAFILE to get reproducible cost function.
+# Uses data indicies from MNIST specified in run_params["datafile"] to get reproducible cost function.
 # Data is stratified if no file is specified.
-# DATAPOINTS_PER_CLASS data points, per class.
-nnpef = nn_pe_force.build_repeatable_NNPeForces(indfl = DATAFILE,image_sidel_use=IMAGE_SIDEL_USE, \
-    n_h_layers=N_H_LAYERS, nodes_per_h_layer=NODES_PER_H_LAYER, datapoints_per_class=DATAPOINTS_PER_CLASS)
+# run_params["datapoints_per_class"] data points, per class.
+nnpef = nn_pe_force.build_repeatable_NNPeForces(indfl = run_params["datafile"], \
+    image_sidel_use=run_params["image_sidel_use"], n_h_layers=run_params["n_h_layers"], \
+    nodes_per_h_layer=run_params["nodes_per_h_layer"], \
+    datapoints_per_class=run_params["datapoints_per_class"])
 
-init_coords = read_coords(COORDS_FILE) # Read location of local minimum for cost function.
+init_coords = read_coords(run_params["coords_file"]) # Read location of local minimum for cost function.
 
 # Initialise ti.ThermodynamicIntegration class object and equilibrate walker for Boltzmann distribution on true 
 # pe surface (given by nnpef.pe) at temperature T.
 this_ti, walker = ti.build_ti(sampling.Hmc, pe_method = nnpef.pe, force_method = nnpef.forces, \
-    initial_coords = init_coords.x, masses = these_masses, T = T, n_bridge = NBRIDGE, \
-    iters_to_waypoint = ITERSTOWAYPOINT, times_to_setdt = NTIMES_SET_DT, run_token = RUNTOKEN, \
-    dt = DT_INITIAL, traj_len = TRAJ_LEN, ntraj_burnin = NTRAJ_BURNIN, ntraj_sample = NTRAJ_SAMPLE, \
-    absxmax = absxmax, gaussianprior_std = GPRIOR_STD)
+    initial_coords = init_coords.x, masses = these_masses, T = run_params["T"], \
+    n_bridge = run_params["nbridge"], iters_to_waypoint = run_params["iterstowaypoint"], \
+    times_to_setdt = run_params["ntimes_set_dt"], run_token = run_params["runtoken"], \
+    dt = run_params["dt_initial"], traj_len = run_params["traj_len"], \
+    ntraj_burnin = run_params["ntraj_burnin"], ntraj_sample = run_params["ntraj_sample"], \
+    absxmax = absxmax, gaussianprior_std = run_params["gprior_std"])
 
 # Run thermodynamic integration. 
 print 'About to do ti. ',time.ctime()
