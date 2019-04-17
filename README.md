@@ -2,7 +2,7 @@
 
 ### Research
 
-Please take a look at https://arxiv.org/abs/1904.04154 for some research performed using this repository. The same document is also availble here as report.pdf.
+Please take a look at https://arxiv.org/abs/1904.04154 for some research performed using this repository. The same document is also available here as report.pdf.
 
 ### Prerequisites
 
@@ -40,7 +40,7 @@ Default parameters are given in the following table.
 | maxiter | 10**4       | Max number of iterations to run. |
 | iterstoswap | 1        | Configuration swaps between neighbouring temperatures are attempted every iterstoswap iterations. |
 | iterstowaypoint | 1    | Restart information is written after every iterstowaypoint iterations. |
-| iterstosetdt | 25      | The step sizes (or equivalently time steps) are updated after every iterstosetdt interations. |
+| iterstosetdt | 25      | The step sizes (or equivalently time steps) are updated after every iterstosetdt iterations. |
 | iterstowritestate | 1  | The latest potential energy values and coordinates are written out after every iterstowritestate iterations. |
 | n_h_layers | 1         | The number of hidden layers. |
 | nodes_per_h_layer | 40 | The number of nodes in each hidden layer. |
@@ -66,7 +66,7 @@ $ export OMP_NUM_THREADS=1
 
 ### Data Sets
 
-To ensure reproducability, data sets used in the calculations shown in report.pdf are included here.
+To ensure reproducibility, data sets used in the calculations shown in report.pdf are included here.
 
 | Data Set      | File Name     |
 |:-------------:|:-------------:|
