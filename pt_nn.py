@@ -21,9 +21,12 @@ def read_runparameters():
         "nT" : 16                # (int) Number of temperatures to use.
         "Tmin" : 1.0e-2          # (float) Lowest temperature in ladder of temperatures.
         "Tmax" : 1.0e0           # (float) Maximum temperature in ladder of temperatures. 
-        "absxmaxfac" : 5.0e1     # (float) The parameters of the NN will be constrained to be with a range 
-                                 # "[-absxmaxabsxmax]" where absxmax = absxmaxfac/sqrt(k_i), with k_i the 
+        "netname" : ""           # (str) Name for special architectures. Supported: "" (feed forward) and "lenet" (LeNet-5)
+        "absxmaxfac" : 5.0e1     # (float or list) The parameters of the NN will be constrained to be with a range 
+                                 # "[-absxmax,absxmax]" where absxmax = absxmaxfac/sqrt(k_i), with k_i the 
                                  # inward degree of the neuron to which parameter i transmits values.
+                                 # List values only permitted for netname == 'lenet'. List must either have 5 elements 
+                                 # (specifying seperate absxmaxfac for each layer, or an element for every edge in the network.
         "gprior_std" : None      # (None or float) If this is set to a real value then an additional term is applied to (H)MC
                                  # acceptance/rejection such that the target distribution is proportional to
                                  # multivariate Gaussian with this standard deviation for each dimension. 
@@ -70,6 +73,7 @@ def read_runparameters():
     "nodes_per_h_layer" : 40,
     "image_sidel_use" : 16,
     "datapoints_per_class" : 50,
+    "netname": ""
     }
 
     run_parameters_out = {}
@@ -87,8 +91,63 @@ def read_runparameters():
         run_parameters_out = default_run_parameters
         print "Using default runtime parameters"
 
+    if (run_parameters_out["netname"]=="lenet" and run_parameters_out["image_sidel_use"]!=32):
+        print "Updating image_sidel_use for LeNet from ",run_parameters_out["image_sidel_use"], " to 32."
+        run_parameters_out["image_sidel_use"]=32
+
+    if type(run_parameters_out["absxmaxfac"])==list: 
+
+
+        ############ ERROR CHECKING
+        message = ""
+        if (run_parameters_out["netname"]!="lenet" ):
+            message += "ERROR: absxmaxfac of type list is only permitted for netname 'lenet'. "
+
+        # Check number of dimensions in absxmaxfac. Should be 5 (for 5 layers) or specify the whole network
+        # Begin by counting the number of edges in the network
+        nd =  np.prod([6, 1, 5, 5]) + 6 # conv1
+        nd += np.prod([16, 6, 5, 5]) + 16 # conv2
+        nd += np.prod([120, 400]) + 120 #fc1
+        nd += np.prod([84, 120]) + 84 #fc2
+        nd += np.prod([10, 84]) + 10 #fc3
+        if (len(run_parameters_out["absxmaxfac"])!=5 and len(run_parameters_out["absxmaxfac"])!=nd):
+            message += "ERROR: absxmaxfac must be either a float or a list of length 5. "
+
+        for i in run_parameters_out["absxmaxfac"]:
+            if not (type(i)==float or type(i)==int):
+                message +="ERROR: absxmaxfac must be either a float or a list of numbers. Got ",\
+                    run_parameters_out["absxmaxfac"]
+
+        if (message != ""):
+            sampling.exit_error(message,11)
+        ############ DONE ERROR CHECK
+
+        if (len(run_parameters_out["absxmaxfac"])==5):
+            # user has specified separate factors for each layer
+            num_weights = np.prod([6, 1, 5, 5]) + 6 # conv1
+            axmf = run_parameters_out["absxmaxfac"][0]*np.ones(num_weights)
+            num_weights = np.prod([16, 6, 5, 5]) + 16 # conv2
+            axmf = np.concatenate((axmf, run_parameters_out["absxmaxfac"][1]*np.ones(num_weights)))
+            num_weights = np.prod([120, 400]) + 120 #fc1
+            axmf = np.concatenate((axmf, run_parameters_out["absxmaxfac"][2]*np.ones(num_weights)))
+            num_weights = np.prod([84, 120]) + 84 #fc2
+            axmf = np.concatenate((axmf, run_parameters_out["absxmaxfac"][3]*np.ones(num_weights)))
+            num_weights = np.prod([10, 84]) + 10 #fc3
+            axmf = np.concatenate((axmf, run_parameters_out["absxmaxfac"][4]*np.ones(num_weights)))
+            run_parameters_out["absxmaxfac"] = axmf
+        else:
+            run_parameters_out["absxmaxfac"] = np.asarray(run_parameters_out["absxmaxfac"])
+
     with open('pt_nn.config','w') as f:
+
+        if type(run_parameters_out["absxmaxfac"]) is np.ndarray:
+            run_parameters_out["absxmaxfac"] = run_parameters_out["absxmaxfac"].tolist()
+
         f.write(json.dumps(run_parameters_out))
+
+        if type(run_parameters_out["absxmaxfac"]) is list:
+            run_parameters_out["absxmaxfac"] = np.asarray(run_parameters_out["absxmaxfac"])
+
         print "Written runtime parameters to pt_nn.config"
 
     # specify file for indices to read or write the indices of stratified data samples
@@ -127,9 +186,12 @@ these_masses = 1.0 # all parameters will have the same effective timestep.
 # Set limits on parameter values for random (uniform) initialisation.
 # Use standard [-1/sqrt(fan in) , 1/sqrt(fan in)]
 intial_absxmax = 1.0/np.sqrt(nn_pe_force.calc_fan_in(run_params["image_sidel_use"]**2, \
-    run_params["n_h_layers"],run_params["nodes_per_h_layer"],10))
-nd = calc_numdim(run_params["image_sidel_use"], run_params["n_h_layers"], run_params["nodes_per_h_layer"], \
-    10) # calculate total number of parameters for NN
+    run_params["n_h_layers"],run_params["nodes_per_h_layer"],10,run_params["netname"]))
+if (run_params["netname"]==""):
+    nd = calc_numdim(run_params["image_sidel_use"], run_params["n_h_layers"], \
+        run_params["nodes_per_h_layer"], 10) # calculate total number of parameters for NN
+elif (run_params["netname"]=="lenet"):
+    nd = len(intial_absxmax)
 
 # Initialise object to calculate pe and force values for NN.
 # Uses data indicies from MNIST specified in run_params["datafile"] to get reproducible cost function.
@@ -138,7 +200,7 @@ nd = calc_numdim(run_params["image_sidel_use"], run_params["n_h_layers"], run_pa
 nnpef = nn_pe_force.build_repeatable_NNPeForces(indfl = run_params["datafile"], \
     image_sidel_use=run_params["image_sidel_use"], n_h_layers=run_params["n_h_layers"], \
     nodes_per_h_layer=run_params["nodes_per_h_layer"], \
-    datapoints_per_class=run_params["datapoints_per_class"])
+    datapoints_per_class=run_params["datapoints_per_class"], net_name=run_params["netname"])
 
 # Initialise random walkers or read restart file.
 # Initialise parallel tempering object.
